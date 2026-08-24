@@ -4,6 +4,16 @@ Research and build notes for turning a OnePlus 8 (codename `instantnoodle`, Qual
 SM8250) into a dedicated Linux gaming handheld, running a mainline-adjacent kernel instead
 of Android.
 
+## How this is built
+
+This project is developed with AI assistance, using models including Claude Sonnet 5 and
+Claude Opus 5, doing the research, source verification, packaging, and build work
+alongside the author. Every non-obvious claim in `docs/verification-log.md` is traced to a
+primary source (a real file, a real build, a real API response) specifically so the work
+can be checked rather than taken on faith - that's the point of that file existing at all.
+If you think AI involvement automatically makes a project worthless, this isn't the repo
+for you; no need to spend your time on it.
+
 ## Status
 
 Nothing has been flashed to real hardware yet. Everything below has been verified as far
