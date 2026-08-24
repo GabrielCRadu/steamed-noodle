@@ -271,16 +271,40 @@ Desfășurarea stivei de operare necesită pregătirea partițiilor fizice UFS, 
 
 ### **Fluxul Pas cu Pas de Instalare (dintr-un fork comunitar SM8250)**
 
+> **Pas 0, obligatoriu, înainte de orice altceva:** descărcați și verificați (checksum) un
+> pachet complet de restaurare OxygenOS (MSM Download Tool sau imagine flashabilă prin EDL),
+> potrivit exact cu modelul și regiunea telefonului vostru (IN2013/IN2010, nu variantele de
+> operator T-Mobile/Verizon). Acesta e singura plasă de siguranță reală dacă ceva merge prost
+> la pașii 5-6 de mai jos - nu contați pe `fastboot fetch` (suport incert pentru acest
+> bootloader, netestat) și nu contați exclusiv pe EDL (vezi caseta de la finalul secțiunii).
+> Faceți asta *înainte* de deblocarea bootloader-ului, cât timp telefonul încă răspunde normal.
+
 > 1. **Deblocarea Bootloader-ului:** Terminalul este comutat în modul Fastboot prin menținerea combinației de taste Volume Down \+ Power, urmată de comanda: `fastboot flashing unlock`
 > 2. **Pregătirea Kernelului:** Se clonează fork-ul `github.com/Xo666/mainline-instantnoodle`, branch `6.16.7` - **singurul dintre cele trei fork-uri cunoscute cu GPU confirmat funcțional** (vezi Secțiunea 1) - și se integrează `sm8250-oneplus-instantnoodle.dts` ca sursă de kernel pentru `pmbootstrap`, deoarece codename-ul `instantnoodle` nu există în pmaports upstream. `instantnoodlep` (8 Pro) și `kebab` (8T) sunt singurele codename-uri OnePlus SM8250 impachetate oficial. Alternativa `gitlab.postmarketos.org/WuerfelDev/linux-sm8250` (branch `6.17.0-instantnoodle`) are încărcare funcțională dar GPU dezactivat - nu porniți de aici dacă scopul e gaming.
 > 3. **Inițializarea Mediului de Construcție:** Pe o stație gazdă Linux, se rulează `pmbootstrap init`, punctând sursa de kernel către fork-ul de la pasul 2. **Interfața de utilizator "gamescope" nu există ca opțiune** - lista reală din pmbootstrap conține buffyboard, cage, console, cosmic, fbkeyboard, gnome, gnome-mobile, i3wm, kodi, lomiri, lxqt, mate, moonlight, niri, openbox, phosh, plasma-bigscreen/desktop/mobile, retroarch, shelli, sway, sxmo, weston, windowmaker, xfce4. Cea mai apropiată alegere gata făcută e `retroarch` sau `moonlight`; un compositor de gaming dedicat trebuie ambalat separat sau se alege `none` și se pornește manual după boot.
 > 4. **Compilarea Nucleului și Generarea Imaginilor:** `pmbootstrap install --split`
-> 5. **Scrierea Partițiilor:** Dispozitivul conectat în modul Fastboot este inscripționat secvențial:
+> 5. **Verificarea dimensiunii înainte de scriere:** rulați `fastboot getvar all` pe telefonul
+>    real și comparați dimensiunea raportată a partiției `super` cu dimensiunea efectivă a
+>    imaginii de rootfs generate la pasul 4. `pmbootstrap`/`fastboot` **nu fac această
+>    verificare automat** - un `fastboot flash super` cu o imagine de dimensiune greșită e
+>    exact tipul de eroare care duce la partiții dinamice corupte (vezi tabelul de riscuri).
+> 6. **Dezactivarea verificării AVB (vbmeta):** înainte de a scrie rootfs-ul, rulați
+>    `pmbootstrap flasher flash_vbmeta`. Fără acest pas, verificarea Android Verified Boot
+>    poate respinge un boot.img/kernel nesemnat și cauza un bootloop sau un soft-brick -
+>    ordinea contează, vbmeta trebuie scris *înainte* de rootfs, nu după. **Neverificat dacă
+>    OnePlus 8 chiar impune asta după deblocarea bootloader-ului** - testați izolat dacă se
+>    poate, dar nu săriți pasul presupunând că nu e necesar.
+> 7. **Scrierea Partițiilor:** Dispozitivul conectat în modul Fastboot este inscripționat secvențial:
 >    ```
+>    pmbootstrap flasher flash_dtbo
+>    pmbootstrap flasher flash_vbmeta
 >    pmbootstrap flasher flash_boot
 >    pmbootstrap flasher flash_rootfs
 >    ```
->    Dacă dispozitivul utilizează schema de partiționare dinamică Android (*Super Partition*), imaginea rootfs trebuie redirecționată către volumul fizic userdata sau mapată într-un sub-volum logic pentru a nu distruge structura LUN-urilor adiacente.
+>    Câmpul `deviceinfo_super_partitions` din portul draft **nu are niciun efect real** - nu
+>    există în schema pe care `pmbootstrap` chiar o citește (verificat direct în codul sursă).
+>    Nu vă bazați pe el pentru siguranță; scrierea în `super` e un `fastboot flash` brut,
+>    fără nicio logică de redimensionare a partițiilor logice.
 
 Pachetele `fex`, `proton`, `steam` și `box64` **nu există deloc în pmaports** - toată stiva de gaming din userspace e muncă neambalată, de făcut manual sau prin scripturi proprii.
 
@@ -316,14 +340,23 @@ Jocurile pe 32 de biți Direct3D 9 (*Fallout: New Vegas*) și titlurile 2D/izome
 
 | Risc Tehnic Identificat | Mecanism Cauzal | Impact Asupra Sistemului | Protocol Tehnic de Remediere / Mitigare |
 | :---- | :---- | :---- | :---- |
-| **Coruperea Tabelei GPT UFS** | Suprascrierea necorespunzătoare a volumelor dinamice super/userdata. | Dispozitiv blocat complet (*Hard-Brick*); lipsă răspuns Fastboot. | Forțare în mod EDL (Qualcomm HS-USB QDLoader 9008) și rescriere GPT via bkerler/edl sau OnePlus MSM Download Tool. |
+| **Coruperea Tabelei GPT UFS** | Suprascrierea necorespunzătoare a volumelor dinamice super/userdata; `fastboot flash super` e o scriere brută, fără verificare de dimensiune. | Dispozitiv blocat complet (*Hard-Brick*); lipsă răspuns Fastboot. | Forțare în mod EDL (Qualcomm HS-USB QDLoader 9008) și rescriere GPT via bkerler/edl sau OnePlus MSM Download Tool - transport confirmat funcțional pe acest SoC, dar fără o recuperare completă documentată public. Pasul 0 din Secțiunea 5 (pachet OxygenOS pregătit dinainte) e plasa de siguranță reală. |
 | **Fork-ul cu GPU nu are încărcare (și invers)** | `pm8150b-charger` (5 W) funcționează doar pe fork-ul WuerfelDev, care are `&gpu` dezactivat; fork-ul Xo666 (GPU funcțional) nu are deloc nod de charger. | Pe Xo666, bateria se descarcă normal sub sarcină, fără nicio compensare din priză - nu ~2.7-5.5 ore cu Peltier alimentat, ci durata reală a bateriei neasistate. | Nefolosibil ca atare; necesită portarea manuală a nodurilor de charger din WuerfelDev peste DTS-ul Xo666 (Secțiunea 4). Nimeni nu a făcut încă această muncă, din câte se poate verifica. |
 | **Eșec Handshake USB-PD** | Comportament netestat al mux-ului `fcs,fsa4480` la orientare inversă a conectorului. | Posibilă întrerupere a alimentării coolerului Peltier și revenire la throttling. | Marcat OPEN în log-ul de verificare; necesită testare directă pe dispozitiv. |
 
 #### **Protocolul de Recuperare EDL (Emergency Download Mode)**
 
+> **Tratați EDL ca transport confirmat funcțional, nu ca plasă de siguranță completă
+> dovedită.** Există un loader Firehose comunitar pentru familia OnePlus 8 în
+> `bkerler/edl`, verificat funcțional pe hardware real (autentificare EDL/Sahara reușită,
+> inclusiv funcția `fixgpt` de reparare GPT). Dar nu există, din câte s-a putut verifica,
+> niciun raport public al cuiva care a dus o recuperare completă capăt-la-capăt, de la un
+> telefon efectiv mort la unul care pornește din nou. E o unealtă reală, nu una teoretică -
+> dar nedovedită ca soluție completă. De-asta pasul 0 de mai sus (pachetul OxygenOS descărcat
+> dinainte) contează mai mult decât EDL însuși.
+
 În eventualitatea unui hard-brick provocat de alterarea tabelelor GUID ale discurilor fizice UFS, SoC-ul SM8250 poate fi recuperat prin modul de descărcare de urgență. Terminalul este deconectat, iar prin menținerea ambelor butoane de volum la introducerea cablului USB se inițializează interfața Qualcomm HS-USB QDLoader 9008.
-De sub un sistem Linux, utilitarul open-source bkerler/edl permite comunicarea cu nucleul primar PBL (Primary Boot Loader), încărcarea binarului semnat Firehose (prog_firehose_ddr.elf) și reconstrucția completă a LUN-urilor UFS din imaginile de fabrică OxygenOS.
+De sub un sistem Linux, utilitarul open-source bkerler/edl permite comunicarea cu nucleul primar PBL (Primary Boot Loader), încărcarea binarului semnat Firehose (prog_firehose_ddr.elf) și reconstrucția completă a LUN-urilor UFS din imaginile de fabrică OxygenOS - **presupunând că aveți deja aceste imagini de fabrică pregătite dinainte** (pasul 0).
 
 #### **Protecția Acumulatorului: de verificat, nu de presupus**
 
