@@ -1,0 +1,33 @@
+# Build artifacts / images
+*.img
+*.img.xz
+*.zip
+*.tar
+*.tar.gz
+*.mbn
+*.elf
+*.bin
+
+# pmbootstrap / chroot output
+.output/
+out/
+build/
+_build/
+
+# Local secrets & device-specific dumps
+*.key
+*.pem
+secrets/
+dumps/
+
+# Editor / OS noise
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Scratch
+scratch/
+tmp/
