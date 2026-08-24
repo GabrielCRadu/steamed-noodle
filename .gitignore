@@ -31,3 +31,6 @@ desktop.ini
 # Scratch
 scratch/
 tmp/
+
+# Local-only working notes (not for the public repo)
+docs/brick-risk-audit.md

@@ -15,7 +15,7 @@ maintainer=""
 _flavor="oneplus-instantnoodle"
 pkgname=linux-$_flavor
 pkgver=6.16.7
-pkgrel=0
+pkgrel=1
 pkgdesc="OnePlus 8 (instantnoodle) mainline kernel, Xo666 fork"
 arch="aarch64"
 _carch="arm64"
@@ -70,6 +70,16 @@ package() {
 		INSTALL_MOD_PATH="$pkgdir" \
 		INSTALL_MOD_STRIP=1 \
 		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs
+	rm -f "$pkgdir"/lib/modules/*/build "$pkgdir"/lib/modules/*/source
+
+	# mkinitfs scans /usr/share/kernel/*/kernel.release to find installed
+	# kernels - without this file it reports "found: []" and fails, even
+	# though the actual vmlinuz/modules are present under boot/ and
+	# lib/modules/. Missing from the first draft; found by diffing against
+	# the working device/community/linux-postmarketos-qcom-sm8250 package
+	# after a real `pmbootstrap install` failed with exactly that error.
+	install -D "$builddir"/include/config/kernel.release \
+		"$pkgdir"/usr/share/kernel/$_flavor/kernel.release
 }
 
 sha512sums="
