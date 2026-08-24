@@ -15,7 +15,7 @@ maintainer=""
 _flavor="oneplus-instantnoodle"
 pkgname=linux-$_flavor
 pkgver=6.16.7
-pkgrel=1
+pkgrel=2
 pkgdesc="OnePlus 8 (instantnoodle) mainline kernel, Xo666 fork"
 arch="aarch64"
 _carch="arm64"
@@ -42,10 +42,17 @@ makedepends="
 # section 1.4 for why this fork and not ObiKeahloa's or WuerfelDev's - this is
 # the only one of the three with a complete, working zap-shader wiring for
 # the GPU, which is a hard prerequisite for the whole gaming-stack project).
-# NOTE: this branch has no pm8150b_charger node at all (see verification-log.md
-# section 4) - charging will not work on an unmodified build of this kernel.
+# NOTE: this branch had no pm8150b_charger node at all (see verification-log.md
+# section 4) - 0001-port-charger-fg-from-wuerfeldev.patch ports the charger
+# and fuel-gauge nodes over from WuerfelDev/linux-sm8250 (branch
+# 6.17.0-instantnoodle), which has working charging but ships with the GPU
+# disabled. The patch is compile-verified (raw dtc build and a full
+# pmbootstrap/abuild package build, both zero errors on the changed nodes)
+# but NOT tested on real hardware - see docs/verification-log.md for the
+# exact verification done and what it does and does not prove.
 source="
 	$pkgname-$pkgver.tar.gz::https://github.com/Xo666/mainline-instantnoodle/archive/refs/heads/$pkgver.tar.gz
+	0001-port-charger-fg-from-wuerfeldev.patch
 "
 builddir="$srcdir/mainline-instantnoodle-$pkgver"
 
@@ -84,4 +91,5 @@ package() {
 
 sha512sums="
 11390f07286a48176ab46d20cd3ed7e389af8605da3b7f9c0c70148f54c2e41194f1205a92fd039b906eade8804360d6b98a77c402a1459098287fa5581e7d89  linux-oneplus-instantnoodle-6.16.7.tar.gz
+a049bd5b354161cbdcba903a6f247eec740d7e2a7e908d60692892bc619e4d8c16c8894c1773f82803033f360676b1ad7c59b31d192bc7c4ebf6f51f8a661cf0  0001-port-charger-fg-from-wuerfeldev.patch
 "

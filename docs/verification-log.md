@@ -470,6 +470,91 @@ separate audit is in progress specifically to catch flashing/brick risks not yet
 kernel-compiles-successfully-style checks (AVB, dynamic partitions, EDL recovery currency,
 device-specific bootloader unlock issues) before any real hardware is touched.
 
+### Update 2026-08-24 (same day, later still): charger/fuel-gauge port attempted - compile-verified only
+
+Section 1.4's fork-divergence problem ("no known tree has both GPU and charging") got an actual
+attempt at a fix, not just documentation. The goal: port WuerfelDev's working
+`pm8150b_charger`/`pm8150b_fg` device tree nodes onto the Xo666 tree without touching its
+zap-shader/GPU wiring.
+
+**What was ported.** Fetched WuerfelDev's `pm8150b.dtsi` and
+`sm8250-oneplus-instantnoodle.dts` directly from `gitlab.postmarketos.org` (branch
+`6.17.0-instantnoodle`, plain unauthenticated GET against the GitLab API's raw-file endpoint) and
+diffed them byte-for-byte against Xo666's equivalents. Applied three changes to
+`pm8150b.dtsi`, matching WuerfelDev exactly:
+
+- The `pm8150b_charger: charger@1000` node (`qcom,pm8150b-charger`, 4 interrupts, 2 io-channels,
+  `status = "disabled"` at this shared-PMIC-description level, same as WuerfelDev's own).
+- Two ADC channel sub-nodes on `pm8150b_adc`: `channel@7` (`usb_in_i_uv`) and `channel@8`
+  (`usb_in_v_div_16`). `channel@9` (`ADC5_CHG_TEMP`, label `chg_temp`) already existed in Xo666's
+  tree and was reused, not duplicated.
+- The `pm8150b_fg: fuel-gauge@4000` node (`qcom,pm8150b-fg`, one interrupt, `status = "disabled"`
+  at the shared level).
+
+Then added a board-level override block to `sm8250-oneplus-instantnoodle.dts`, again matching
+WuerfelDev's board DTS: `&pm8150b_fg { status = "okay"; monitored-battery = <&battery>;
+power-supplies = <&pm8150b_charger>; };` and `&pm8150b_charger { io-channels = <...5 channels...>;
+... status = "okay"; };`. Reading WuerfelDev's actual `&pm8150b_adc` override block (rather than
+assuming) showed `ADC5_VPH_PWR` needs its own dedicated channel node too, not just
+`ADC5_CHG_TEMP` and `ADC5_SBUx` - WuerfelDev declares `channel@83` (`vph_pwr`) and `channel@99`
+(`chg_sbux`) at board level. Both were added to Xo666's existing `&pm8150b_adc` override
+(which already had one board-specific channel, `channel@4f` for `conn_therm`). Nothing touching
+`&gpu`, the zap-shader node, the `fsa4480` SBU mux, or the existing `i2c16`/`bq27411` fuel-gauge
+wiring was changed - those already work on Xo666 and this patch does not go near them.
+
+**Compile verification, two layers:**
+
+1. **Raw `dtc` build.** Installed `clang`/`lld`/`llvm` in the same WSL2 Ubuntu 24.04 host used for
+   the 7.5 build above (they weren't present yet; `apt-get install -y clang lld llvm`).
+   `make ARCH=arm64 LLVM=1 op8_defconfig` then `make ARCH=arm64 LLVM=1 -j16 dtbs` completed with
+   exit code 0 and **zero warnings or errors** anywhere in the build log, including for
+   `sm8250-oneplus-instantnoodle.dtb` specifically (grepped the full log for the filename plus
+   "warning"/"error" - only the expected `DTC` compile line matched, no diagnostics attached to
+   it). Decompiling the resulting `.dtb` back to source (`dtc -I dtb -O dts`) confirmed the
+   `charger@1000` node resolves with `status = "okay"` and all 5 io-channels correctly cross-
+   referenced (`usb_in_i_uv`, `usb_in_v_div_16`, `chg_sbux`, `vph_pwr`, `chg_temp`), the
+   `fuel-gauge@4000` node resolves with `status = "okay"` and a valid `monitored-battery` phandle,
+   and the `&gpu` node's `zap-shader` sub-node with `firmware-name =
+   "qcom/sm8250/OnePlus/a650_zap.mbn"` is present and unchanged - confirming the charger port did
+   not disturb the GPU wiring this whole project depends on.
+2. **Patch file + real abuild/pmbootstrap pipeline.** Generated `git diff` into
+   `pmaports/linux-oneplus-instantnoodle/0001-port-charger-fg-from-wuerfeldev.patch`, verified it
+   applies cleanly to a clean checkout (`git stash` the working changes, `git apply --check`, then
+   `git apply` - both succeeded with no fuzz or offset warnings). Added it to the APKBUILD's
+   `source=` list (picked up automatically by the existing `prepare()`'s `default_prepare` call,
+   abuild's documented convention for applying `.patch` files listed in `source=`), bumped
+   `pkgrel` from 1 to 2, and generated the real sha512sum. Copied both files into the local
+   `~/pmaports/device/testing/linux-oneplus-instantnoodle/` checkout used for the four packages in
+   the section above, ran `pmbootstrap checksum linux-oneplus-instantnoodle` (checksum matched
+   what was already computed locally - no drift), then `pmbootstrap -y build
+   linux-oneplus-instantnoodle`. **Build succeeded**, cache-warm, in about 2m45s, producing
+   `linux-oneplus-instantnoodle-6.16.7-r2.apk`. The build log explicitly shows the patch being
+   applied ("patching file arch/arm64/boot/dts/qcom/pm8150b.dtsi", "patching file
+   arch/arm64/boot/dts/qcom/sm8250-oneplus-instantnoodle.dts") before the kernel and DTBs compile,
+   and the `sm8250-oneplus-instantnoodle.dtb` DTC line in that build's log carries no attached
+   warnings either.
+
+**What this does NOT prove, stated plainly.** This is a compile-time check only. Nothing here
+has been run on a real OnePlus 8. It is not known whether:
+
+- the `pm8150b-charger` and `pm8150b-fg` kernel drivers actually probe successfully against this
+  hardware when the DTS says they should (a DTS node parsing and cross-referencing cleanly says
+  nothing about whether the PMIC responds correctly at runtime);
+- the ADC channel assignments (`channel@7`, `@8`, `@83`, `@99`) read sane voltage/current values
+  once probed, or are wired to the right physical pins on this specific board revision;
+  WuerfelDev's own board DTS was taken as ground truth here without independent hardware
+  confirmation on that tree either;
+- adding these nodes has any interaction with the GPU or SBU mux at runtime that a static DTS
+  diff cannot reveal - the DTB decompile confirmed the *text* of the zap-shader node is
+  unchanged, not that probe-order or power-sequencing interactions are safe;
+- charging actually works, at 5 W or any other rate, on a phone built from this patched tree.
+
+This patch is a candidate fix, not a resolution to the fork-divergence problem in section 1.4.
+It compiles and packages cleanly through the real pipeline, which is stronger evidence than "it
+looks right on paper," but it is not hardware evidence. Section 1.4's practical read - "no tree
+cleanly has GPU and charging both confirmed working at once" - still stands until someone flashes
+this and checks `power_supply` sysfs on an actual device.
+
 ---
 
 ## 8. Summary

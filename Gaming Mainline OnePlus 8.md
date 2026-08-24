@@ -30,8 +30,13 @@ acord unele cu altele:
 > explicit, iar ObiKeahloa are GPU activat dar fără firmware-ul semnat declarat (deci neconfirmat).
 > Cine construiește acest proiect trebuie fie să accepte lipsa de încărcare pe Xo666, fie să
 > porteze manual nodurile de charger peste DTS-ul Xo666, fie să testeze dacă GPU-ul de pe
-> ObiKeahloa chiar pornește - nimeni n-a făcut încă niciuna dintre acestea, din câte se poate
-> verifica.
+> ObiKeahloa chiar pornește. **Actualizare 2026-08-24:** prima dintre aceste opțiuni de portare
+> a fost încercată - nodurile `pm8150b_charger`/`pm8150b_fg` din WuerfelDev au fost portate peste
+> DTS-ul Xo666 și verificate ca se compilează curat, atât cu `dtc` direct, cât și prin pipeline-ul
+> real `abuild`/`pmbootstrap` (patch la `pmaports/linux-oneplus-instantnoodle/`, detalii în
+> `docs/verification-log.md`). **Asta e o verificare de compilare, nu una pe hardware real** -
+> nimeni n-a confirmat încă, pe un telefon fizic, că încărcarea sau fuel gauge-ul chiar funcționează
+> cu acest patch aplicat.
 
 Wiki-ul postmarketOS confirmă că dispozitivul boot-ează (`booting = yes`) cu 3D funcțional (`status_3d = Y`), dar îl marchează `packaged = no` și `category = testing` - adică **nu există un pachet `device-oneplus-instantnoodle` în pmaports**. Pachetele OnePlus care chiar există sunt `device-oneplus-enchilada` (6), `device-oneplus-fajita` (6T), `device-oneplus-bacon` (One), `device-oneplus-billie2` (Nord N100), `device-oneplus-guacamole` (7 Pro), `device-oneplus-instantnoodlep` (**8 Pro**) și `device-oneplus-kebab` (**8T**). OnePlus 8 standard nu e printre ele. Fluxul de instalare din Secțiunea 5 trebuie tratat ca instalare dintr-un fork, nu ca `pmbootstrap init` standard.
 
@@ -236,6 +241,16 @@ postmarketOS - și care are GPU-ul dezactivat explicit în DTS. Detaliile:
   descarcă normal, fără nicio compensare din priză), fie cineva trebuie să porteze manual nodurile
   `pm8150b_charger` / `pm8150b_fg` din WuerfelDev peste DTS-ul Xo666 - o muncă de merge, nu o
   configurare.
+* **Actualizare 2026-08-24: portarea a fost încercată.** Există acum un patch
+  (`pmaports/linux-oneplus-instantnoodle/0001-port-charger-fg-from-wuerfeldev.patch`) care aduce
+  nodurile `pm8150b_charger` și `pm8150b_fg`, plus canalele ADC pe care le folosesc, din WuerfelDev
+  peste DTS-ul Xo666, fără să atingă nodul `&gpu` sau zap-shader-ul. S-a verificat că se compilează
+  curat cu `dtc` (zero avertismente pe nodurile schimbate) și că pachetul chiar se construiește prin
+  `abuild`/`pmbootstrap` cu patch-ul aplicat automat. **Nimic din asta nu a fost testat pe un telefon
+  real** - nu se știe dacă driverul de charger sau fuel gauge chiar pornesc, dacă valorile ADC sunt
+  corecte pe acest hardware, sau dacă adăugarea nodurilor interferează cumva cu GPU-ul la runtime
+  (verificarea de mai sus arată doar că textul zap-shader-ului rămâne neschimbat în DTB-ul compilat,
+  nu că interacțiunea la rulare e sigură). Detalii complete în `docs/verification-log.md`.
 
 Remediile propuse inițial trebuie tratate cu scepticism:
 
@@ -341,7 +356,7 @@ Jocurile pe 32 de biți Direct3D 9 (*Fallout: New Vegas*) și titlurile 2D/izome
 | Risc Tehnic Identificat | Mecanism Cauzal | Impact Asupra Sistemului | Protocol Tehnic de Remediere / Mitigare |
 | :---- | :---- | :---- | :---- |
 | **Coruperea Tabelei GPT UFS** | Suprascrierea necorespunzătoare a volumelor dinamice super/userdata; `fastboot flash super` e o scriere brută, fără verificare de dimensiune. | Dispozitiv blocat complet (*Hard-Brick*); lipsă răspuns Fastboot. | Forțare în mod EDL (Qualcomm HS-USB QDLoader 9008) și rescriere GPT via bkerler/edl sau OnePlus MSM Download Tool - transport confirmat funcțional pe acest SoC, dar fără o recuperare completă documentată public. Pasul 0 din Secțiunea 5 (pachet OxygenOS pregătit dinainte) e plasa de siguranță reală. |
-| **Fork-ul cu GPU nu are încărcare (și invers)** | `pm8150b-charger` (5 W) funcționează doar pe fork-ul WuerfelDev, care are `&gpu` dezactivat; fork-ul Xo666 (GPU funcțional) nu are deloc nod de charger. | Pe Xo666, bateria se descarcă normal sub sarcină, fără nicio compensare din priză - nu ~2.7-5.5 ore cu Peltier alimentat, ci durata reală a bateriei neasistate. | Nefolosibil ca atare; necesită portarea manuală a nodurilor de charger din WuerfelDev peste DTS-ul Xo666 (Secțiunea 4). Nimeni nu a făcut încă această muncă, din câte se poate verifica. |
+| **Fork-ul cu GPU nu are încărcare (și invers)** | `pm8150b-charger` (5 W) funcționează doar pe fork-ul WuerfelDev, care are `&gpu` dezactivat; fork-ul Xo666 (GPU funcțional) nu are deloc nod de charger. | Pe Xo666 nemodificat, bateria se descarcă normal sub sarcină, fără nicio compensare din priză - nu ~2.7-5.5 ore cu Peltier alimentat, ci durata reală a bateriei neasistate. | Un patch care portează nodurile de charger din WuerfelDev peste DTS-ul Xo666 există acum (`pmaports/linux-oneplus-instantnoodle/0001-port-charger-fg-from-wuerfeldev.patch`) și e verificat că se compilează curat, inclusiv prin `abuild`/`pmbootstrap` real. **Netestat pe hardware** - nu se știe dacă încărcarea chiar funcționează cu acest patch pe un telefon fizic. Vezi `docs/verification-log.md`. |
 | **Eșec Handshake USB-PD** | Comportament netestat al mux-ului `fcs,fsa4480` la orientare inversă a conectorului. | Posibilă întrerupere a alimentării coolerului Peltier și revenire la throttling. | Marcat OPEN în log-ul de verificare; necesită testare directă pe dispozitiv. |
 
 #### **Protocolul de Recuperare EDL (Emergency Download Mode)**
@@ -382,10 +397,22 @@ manual. Coolerul Peltier al GameSir X3 Pro rezolvă oricum jumătatea termică a
 de rezultatul alimentării, pentru că se alimentează singur de la priză - dar fără o portare a
 nodurilor de charger peste DTS-ul Xo666, telefonul de pe acest fork joacă bine și se descarcă normal,
 fără nicio compensare din priză.
-Prin respectarea corecțiilor din acest document, portarea nodurilor de încărcare din WuerfelDev
-peste DTS-ul Xo666, și verificarea necunoscutei rămase (clientul Steam ARM64, Secțiunea 3) pe
-hardware real, OnePlus 8 poate depăși stadiul de experiment demonstrativ și deveni o consolă
-portabilă funcțională pe Linux mainline.
+
+**Actualizare 2026-08-24:** portarea de mai sus a fost încercată. Nodurile `pm8150b_charger` și
+`pm8150b_fg` din WuerfelDev au fost aduse peste DTS-ul Xo666 fără să atingă nodul `&gpu` sau
+zap-shader-ul, iar rezultatul se compilează curat - atât cu `dtc` direct, cât și prin pipeline-ul
+real `abuild`/`pmbootstrap` (patch-ul e la
+`pmaports/linux-oneplus-instantnoodle/0001-port-charger-fg-from-wuerfeldev.patch`, detalii complete
+în `docs/verification-log.md`). **Important: asta e doar o verificare de compilare.** Nu s-a testat
+pe niciun telefon real dacă driverul de charger sau fuel gauge chiar pornesc, dacă valorile ADC
+raportate sunt corecte, sau dacă adăugarea acestor noduri interferează la runtime cu GPU-ul sau cu
+mux-ul USB-C - lucruri pe care o comparație statică de device tree nu le poate dovedi. Problema
+fork-fragmentării din Secțiunea 1 rămâne, în esență, nerezolvată până la testarea pe hardware; ce
+există acum e un candidat de rezolvare, nu o rezolvare confirmată.
+
+Prin respectarea corecțiilor din acest document, testarea pe hardware real a patch-ului de mai sus,
+și verificarea necunoscutei rămase (clientul Steam ARM64, Secțiunea 3), OnePlus 8 poate depăși
+stadiul de experiment demonstrativ și deveni o consolă portabilă funcțională pe Linux mainline.
 
 #### **Lucrări citate**
 
