@@ -91,3 +91,20 @@ writing them belongs to their respective authors and forks, not to this project.
 The firmware referenced (but not included - see `.gitignore`) by
 `pmaports/firmware-oneplus-instantnoodle/` is proprietary Qualcomm/OnePlus-signed material
 with no clear redistribution license; see `docs/verification-log.md` for the caveat.
+
+## Disclaimer
+
+This is an independent, unofficial research project. It is not affiliated with, endorsed
+by, or sponsored by OnePlus, Qualcomm, or any of their partners; not affiliated with the
+individual authors or maintainers of the third-party kernel forks or drivers referenced
+here; and not affiliated with Valve or Steam. All trademarks belong to their respective
+owners.
+
+Everything in this repo is provided as-is, with no warranty of any kind. Flashing a phone
+with a custom kernel and bootloader-unlocked firmware carries real risk, including
+permanently bricking the device, data loss, and hardware damage. The author and
+contributors to this project accept no responsibility or liability for any damage, data
+loss, security vulnerability, or other harm, material or otherwise, resulting from using
+anything in this repository, whether by following the documented instructions, using the
+drafted packages, or otherwise. By using this project to install any of this on a real
+device, you accept that risk yourself and agree to this disclaimer.
