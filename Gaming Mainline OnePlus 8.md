@@ -15,10 +15,21 @@ La nivel de software, arhitectura propusă se sprijină pe driverul grafic compl
 
 Suportul pentru platforma Qualcomm SM8250 există în kernelul Linux mainline (versiunile 6.6-6.17+) doar pentru o mână de plăci de referință și telefoane Xiaomi/Sony/Samsung - lista completă din `arch/arm64/boot/dts/qcom` la data verificării era `hdk`, `mtp`, `samsung-r8q`, `samsung-x1q`, `sony-xperia-edo-pdx203`, `sony-xperia-edo-pdx206`, `xiaomi-elish-{boe,csot}`, `xiaomi-pipa`. **Niciun device tree OnePlus SM8250 nu există în kernel.org**, nici pentru OnePlus 8, nici pentru 8 Pro, nici pentru 8T.
 
-Suportul real pentru `instantnoodle` (codul OnePlus 8 standard) trăiește în două fork-uri neoficiale, în afara pmaports și a kernelului postmarketOS oficial:
+Suportul real pentru `instantnoodle` (codul OnePlus 8 standard) trăiește în cel puțin **trei**
+fork-uri neoficiale, în afara pmaports și a kernelului postmarketOS oficial - și nu sunt de
+acord unele cu altele:
 
-- [`github.com/Xo666/mainline-instantnoodle`](https://github.com/Xo666/mainline-instantnoodle) (branch `6.16.7`), care conține `sm8250-oneplus-instantnoodle.dts` - acesta e device tree-ul verificat și folosit ca referință în acest document (vezi `reference/dts/`).
-- [`gitlab.com/ObiKeahloa/linux`](https://gitlab.com/ObiKeahloa/linux/-/tree/sm8250/v6.13-instantnoodle) (branch `sm8250/v6.13-instantnoodle`).
+- [`github.com/Xo666/mainline-instantnoodle`](https://github.com/Xo666/mainline-instantnoodle) (branch `6.16.7`), care conține `sm8250-oneplus-instantnoodle.dts` - acesta e device tree-ul folosit ca referință principală în acest document (vezi `reference/dts/`), pentru că e **singurul cu GPU-ul confirmat funcțional**.
+- [`gitlab.com/ObiKeahloa/linux`](https://gitlab.com/ObiKeahloa/linux/-/tree/sm8250/v6.13-instantnoodle) (branch `sm8250/v6.13-instantnoodle`) - neauditat independent încă.
+- [`gitlab.postmarketos.org/WuerfelDev/linux-sm8250`](https://gitlab.postmarketos.org/WuerfelDev/linux-sm8250/-/tree/6.17.0-instantnoodle) (branch implicit `6.17.0-instantnoodle`) - acesta e fork-ul spre care indică efectiv câmpul `pmoskernel = 6.17.0` de pe wiki-ul postmarketOS, nu cele de mai sus. Are încărcare funcțională, dar **GPU-ul e dezactivat explicit în DTS** (`&gpu { status = "disabled"; }`) - vezi caseta de mai jos.
+
+> **Cel mai important lucru de reținut din toată Secțiunea 1:** niciun fork, la data verificării,
+> nu are simultan GPU funcțional, încărcare funcțională, și comutare corectă de orientare USB-C.
+> Xo666 (folosit ca referință aici) are GPU și USB-C funcționale, dar zero încărcare. WuerfelDev
+> are încărcare funcțională, dar GPU dezactivat - ceea ce contrazice direct `status_3d = Y` de pe
+> wiki. Cine construiește acest proiect trebuie fie să accepte lipsa de încărcare pe Xo666, fie să
+> porteze manual nodurile de charger din WuerfelDev peste DTS-ul Xo666 - o muncă de merge/patch
+> care, din câte se poate verifica, nimeni n-a făcut-o încă.
 
 Wiki-ul postmarketOS confirmă că dispozitivul boot-ează (`booting = yes`) cu 3D funcțional (`status_3d = Y`), dar îl marchează `packaged = no` și `category = testing` - adică **nu există un pachet `device-oneplus-instantnoodle` în pmaports**. Pachetele OnePlus care chiar există sunt `device-oneplus-enchilada` (6), `device-oneplus-fajita` (6T), `device-oneplus-bacon` (One), `device-oneplus-billie2` (Nord N100), `device-oneplus-guacamole` (7 Pro), `device-oneplus-instantnoodlep` (**8 Pro**) și `device-oneplus-kebab` (**8T**). OnePlus 8 standard nu e printre ele. Fluxul de instalare din Secțiunea 5 trebuie tratat ca instalare dintr-un fork, nu ca `pmbootstrap init` standard.
 
@@ -28,7 +39,7 @@ Wiki-ul postmarketOS confirmă că dispozitivul boot-ează (`booting = yes`) cu 
 | **Touchscreen** | Funcțional | `samsung,s6sy761` la adresa 0x48 pe i2c13 | Nu e goodix și nu e synaptics_dsx - e un controller Samsung dedicat. |
 | **Stocare UFS** | Funcțional | ufs_qcom | DTS și wiki declară `jedec,ufs-2.0`, nu UFS 3.0. |
 | **USB-C OTG / USB 3.0** | Funcțional, cu quirk | qcom-pmic-typec / dwc3-qcom | Mux `fcs,fsa4480` @ 0x42 pe i2c15; comportamentul de orientare e neverificat pe hardware. |
-| **USB-PD (Power Delivery) / Încărcare** | **Confirmată la 5 W** | `qcom,pm8150b-charger` | Wiki-ul o listează explicit ca funcțională. Doar încărcarea rapidă Warp (`oplus,stm8s-fastcg`, 5V/6A) lipsește - "no driver exists". Vezi Secțiunea 4. |
+| **USB-PD (Power Delivery) / Încărcare** | **5 W confirmată, dar doar pe fork-ul fără GPU** | `qcom,pm8150b-charger` | Nod absent complet din DTS-ul Xo666 (folosit peste tot în acest document); prezent și funcțional doar pe fork-ul WuerfelDev, care are GPU-ul dezactivat. Vezi Secțiunea 4. |
 | **Audio ALSA/PipeWire** | Funcțional Condiționat | qcom-lpass / `qcom,wcd9380-codec` | Codec e WCD9380, nu WCD9385; plus 2x amplificatoare de difuzor `nxp,tfa9874` pe i2c15 (0x34 cască internă, 0x35 difuzor principal), absente din doc inițial. |
 | **NFC** | Funcțional | `nxp,nxp-nci-i2c` @ 0x28 pe i2c1 | Absent complet din documentul original. |
 | **Flash LED** | Funcțional | `qcom,spmi-flash-led` | Conectat prin magistrala SPMI a PMIC-ului pm8150l; absent din documentul original. |
@@ -54,7 +65,7 @@ Subsistemul de stocare este gestionat prin driverul ufs\_qcom, dar DTS-ul și wi
 Managementul portului USB Type-C pe OnePlus 8 prezintă riscuri structurale în contextul andocării controllerului de joc:
 
 > 1. Quirk-ul de multiplexare SuperSpeed: pe placă există un mux dedicat `fcs,fsa4480` (adresa 0x42, pe i2c15) pentru liniile SBU, prezent în DTS. Comportamentul lui exact la orientare inversă a conectorului nu a fost testat pe hardware real (marcat **OPEN** în log-ul de verificare) - tratați presupunerea de mai jos ca ipoteză, nu ca fapt confirmat: liniile USB 3.0 (5 Gbps) s-ar activa exclusiv dacă orientarea raportată în /sys/class/typec/port0/orientation indică starea normală (*normal*), iar la inserare inversă subsistemul ar cădea în USB 2.0 (480 Mbps). Lățimea de bandă USB 2.0 e oricum suficientă pentru HID.
-> 2. **Încărcarea de bază funcționează, dar e limitată.** Wiki-ul postmarketOS confirmă explicit `qcom,pm8150b-charger` ca funcțional, la 5 W. Presupunerea documentului original, că problema ar fi o "mașină de stări instabilă" la comutarea sink/source, nu are confirmare - problema reală e alta: 5 W e sub consumul de sistem în joc (8-11 W), nu o eroare de negociere. Încărcarea rapidă Warp (`oplus,stm8s-fastcg`) rămâne neimplementată. `pm8150b_typec` declară PDO-uri de sink de 5V/3A fix plus 5-12V variabil. Analiza completă e în Secțiunea 4.
+> 2. **Nodul de charger lipsește pe fork-ul folosit pentru GPU.** `qcom,pm8150b-charger` funcționează, confirmat, la 5 W - dar pe fork-ul WuerfelDev, care are GPU-ul dezactivat. Pe Xo666 (referința acestui document), nodul nu există deloc. Presupunerea documentului original, că problema ar fi o "mașină de stări instabilă" la comutarea sink/source, nu are confirmare pe niciun fork - problema reală, acolo unde încărcarea există, e alta: 5 W e sub consumul de sistem în joc (8-11 W), nu o eroare de negociere. Încărcarea rapidă Warp (`oplus,stm8s-fastcg`) rămâne neimplementată peste tot. `pm8150b_typec` (prezent pe Xo666) declară PDO-uri de sink de 5V/3A fix plus 5-12V variabil, fără driver de charger în spate. Analiza completă e în Secțiunea 4.
 
 ### **Arhitectura Audio: DSP Hexagon, ALSA și PipeWire**
 
@@ -64,6 +75,14 @@ La nivelul spațiului utilizator, este obligatorie definirea profilelor ALSA UCM
 ### **Firmware Proprietar Necesar**
 
 GPU-ul (`&gpu`) nu se inițializează fără shader-ul lui semnat, deci acesta e o precondiție dură pentru întregul stack grafic. Toate cele cinci blob-uri trebuie extrase dintr-o imagine OxygenOS și plasate în `/lib/firmware/qcom/sm8250/OnePlus/`:
+
+> **Scurtătură posibilă:** [`github.com/Xo666/linux-oneplus-instantnoodle`](https://github.com/Xo666/linux-oneplus-instantnoodle)
+> (un alt repo al aceluiași autor, separat de fork-ul de kernel) conține exact aceste blob-uri
+> deja extrase, plus profile ALSA UCM2. Două atenționări înainte de a-l folosi: fișierele sunt
+> puse sub `qcom/sm8250/OnePlus8/` (cu cifră), dar DTS-ul le caută la `qcom/sm8250/OnePlus/`
+> (fără cifră) - trebuie redenumit sau simlink-uit directorul; și sunt blob-uri proprietare
+> Qualcomm/OnePlus redistribuite pe un repo public fără licență declarată - statutul legal e
+> neclar, chiar dacă practic e mai simplu decât extragerea manuală dintr-un dump OxygenOS.
 
 | Blob | Rol | Consecință dacă lipsește |
 | :---- | :---- | :---- |
@@ -190,27 +209,31 @@ telefonului - deci jumătatea de răcire a acestui argument rămâne validă ind
 întâmplă cu stiva de încărcare a telefonului. Jumătatea de alimentare e altă poveste, tratată
 separat mai jos.
 
-### **Alimentare în timpul sesiunii: limitată, nu absentă**
+### **Alimentare în timpul sesiunii: rezolvată pe hârtie, dar pe fork-ul greșit**
 
 Documentul original presupunea că telefonul se încarcă prin controller (*pass-through power*) cât
-timp Peltier-ul răcește, susținând sesiuni "nelimitate". O verificare anterioară a acestui document
-concluzionase, greșit, că încărcarea ar putea să nu funcționeze deloc, pentru că device tree-ul
-auditat local (fork Xo666, `6.16.7`) nu avea niciun nod de charger. Tabelul complet de pe wiki-ul
-postmarketOS clarifică situația:
+timp Peltier-ul răcește, susținând sesiuni "nelimitate". Nodul de charger chiar există și
+funcționează - dar nu pe fork-ul (Xo666) folosit ca referință în restul acestui document pentru că
+e singurul cu GPU confirmat. Există pe **WuerfelDev**, fork-ul spre care indică efectiv wiki-ul
+postmarketOS - și care are GPU-ul dezactivat explicit în DTS. Detaliile:
 
-* **Încărcarea de bază funcționează, confirmat, la 5 W**, prin `qcom,pm8150b-charger` - wiki-ul o
-  listează explicit ca funcțională ("Allows charging at 5W"), nu doar o raportează ca posibilă.
-* **Doar încărcarea rapidă Warp e confirmat absentă**: `oplus,stm8s-fastcg` (5V/6A) - "currently no
-  driver exists", per wiki.
-* Discrepanța cu DTS-ul auditat local se explică probabil prin versiune: wiki-ul declară
-  `pmoskernel = 6.17.0`, un snapshot de kernel (fork WuerfelDev) mai nou decât branch-ul `6.16.7` al
-  fork-ului Xo666 folosit ca referință în acest repo. Nodul de charger a apărut probabil între cele
-  două.
-* La un consum de sistem de 8-11 W sub sarcină, contra unei intrări confirmate de 5 W, deficitul net
-  e de 3-6 W. Pe o baterie de 16.37 Wh, calculul dă aproximativ **2.7-5.5 ore de joc cu baterie în
-  scădere lentă** - nu sesiuni nelimitate, dar nici o necunoscută totală. "Bagă-l în priză și joacă
-  la infinit" rămâne nefondat; "bagă-l în priză și aproape dublează durata sesiunii" e afirmația
-  rezonabilă acum.
+* **Încărcarea de bază funcționează, confirmat, la 5 W**, prin `qcom,pm8150b-charger` - dar doar pe
+  device tree-ul WuerfelDev (`6.17.0-instantnoodle`), unde nodul are `status = "okay"` și e conectat
+  la canalele ADC corecte. **Pe Xo666, acest nod nu există deloc.**
+* **Doar încărcarea rapidă Warp e confirmat absentă, pe ambele fork-uri**: `oplus,stm8s-fastcg`
+  (5V/6A) - "currently no driver exists", per wiki; nodul apare, dezactivat, și pe WuerfelDev.
+* **Fork-ul cu încărcare are GPU-ul dezactivat.** `&gpu { status = "disabled"; }` în DTS-ul
+  WuerfelDev, necondiționat - ceea ce contrazice direct `status_3d = Y` de pe wiki. Practic:
+  telefonul care se încarcă, momentan, nu randează nimic pe acel kernel. Nu se știe dacă e o stare
+  temporară (kernel în lucru, cineva a dezactivat GPU-ul pentru depanare) sau o regresie permanentă.
+* La un consum de sistem de 8-11 W sub sarcină, contra unei intrări de 5 W (pe fork-ul care oferă
+  ambele), deficitul net ar fi de 3-6 W. Pe o baterie de 16.37 Wh, calculul ar da aproximativ
+  **2.7-5.5 ore de joc cu baterie în scădere lentă** - dar acest calcul descrie o configurație care,
+  la data verificării, nu există ca atare pe niciun fork nemodificat.
+* **Ce înseamnă practic:** fie acceptați Xo666 fără încărcare (jocul funcționează, dar telefonul se
+  descarcă normal, fără nicio compensare din priză), fie cineva trebuie să porteze manual nodurile
+  `pm8150b_charger` / `pm8150b_fg` din WuerfelDev peste DTS-ul Xo666 - o muncă de merge, nu o
+  configurare.
 
 Remediile propuse inițial trebuie tratate cu scepticism:
 
@@ -222,8 +245,9 @@ Remediile propuse inițial trebuie tratate cu scepticism:
   în schimb `charge_control_limit` / `input_current_limit`. Comanda de mai sus va eșua aproape sigur.
 
 **Cifrele de 5 W și deficitul de 3-6 W rămân proiecții, nu măsurători** - de confirmat cu telefonul
-fizic în mână. Dar aceasta nu mai e cea mai mare necunoscută a proiectului; acel loc e acum ocupat
-de plumbing-ul clientului Steam ARM64 (Secțiunea 3).
+fizic în mână, pe o configurație care încă nu există: cea mai mare necunoscută reală a proiectului
+nu mai e nici încărcarea, nici plumbing-ul clientului Steam ARM64 (Secțiunea 3) - e dacă nodurile
+de charger din WuerfelDev pot fi portate peste DTS-ul Xo666 fără să strice GPU-ul sau mux-ul USB-C.
 
 ### **Arhitectura Subsistemului de Input**
 
@@ -246,7 +270,7 @@ Desfășurarea stivei de operare necesită pregătirea partițiilor fizice UFS, 
 ### **Fluxul Pas cu Pas de Instalare (dintr-un fork comunitar SM8250)**
 
 > 1. **Deblocarea Bootloader-ului:** Terminalul este comutat în modul Fastboot prin menținerea combinației de taste Volume Down \+ Power, urmată de comanda: `fastboot flashing unlock`
-> 2. **Pregătirea Kernelului:** Se clonează fork-ul verificat (`github.com/Xo666/mainline-instantnoodle`, branch `6.16.7`, sau `ObiKeahloa/linux`, branch `sm8250/v6.13-instantnoodle`) și se integrează `sm8250-oneplus-instantnoodle.dts` ca sursă de kernel pentru `pmbootstrap`, deoarece codename-ul `instantnoodle` nu există în pmaports upstream. `instantnoodlep` (8 Pro) și `kebab` (8T) sunt singurele codename-uri OnePlus SM8250 impachetate oficial.
+> 2. **Pregătirea Kernelului:** Se clonează fork-ul `github.com/Xo666/mainline-instantnoodle`, branch `6.16.7` - **singurul dintre cele trei fork-uri cunoscute cu GPU confirmat funcțional** (vezi Secțiunea 1) - și se integrează `sm8250-oneplus-instantnoodle.dts` ca sursă de kernel pentru `pmbootstrap`, deoarece codename-ul `instantnoodle` nu există în pmaports upstream. `instantnoodlep` (8 Pro) și `kebab` (8T) sunt singurele codename-uri OnePlus SM8250 impachetate oficial. Alternativa `gitlab.postmarketos.org/WuerfelDev/linux-sm8250` (branch `6.17.0-instantnoodle`) are încărcare funcțională dar GPU dezactivat - nu porniți de aici dacă scopul e gaming.
 > 3. **Inițializarea Mediului de Construcție:** Pe o stație gazdă Linux, se rulează `pmbootstrap init`, punctând sursa de kernel către fork-ul de la pasul 2. **Interfața de utilizator "gamescope" nu există ca opțiune** - lista reală din pmbootstrap conține buffyboard, cage, console, cosmic, fbkeyboard, gnome, gnome-mobile, i3wm, kodi, lomiri, lxqt, mate, moonlight, niri, openbox, phosh, plasma-bigscreen/desktop/mobile, retroarch, shelli, sway, sxmo, weston, windowmaker, xfce4. Cea mai apropiată alegere gata făcută e `retroarch` sau `moonlight`; un compositor de gaming dedicat trebuie ambalat separat sau se alege `none` și se pornește manual după boot.
 > 4. **Compilarea Nucleului și Generarea Imaginilor:** `pmbootstrap install --split`
 > 5. **Scrierea Partițiilor:** Dispozitivul conectat în modul Fastboot este inscripționat secvențial:
@@ -282,7 +306,7 @@ Jocurile pe 32 de biți Direct3D 9 (*Fallout: New Vegas*) și titlurile 2D/izome
 | Risc Tehnic Identificat | Mecanism Cauzal | Impact Asupra Sistemului | Protocol Tehnic de Remediere / Mitigare |
 | :---- | :---- | :---- | :---- |
 | **Coruperea Tabelei GPT UFS** | Suprascrierea necorespunzătoare a volumelor dinamice super/userdata. | Dispozitiv blocat complet (*Hard-Brick*); lipsă răspuns Fastboot. | Forțare în mod EDL (Qualcomm HS-USB QDLoader 9008) și rescriere GPT via bkerler/edl sau OnePlus MSM Download Tool. |
-| **Alimentare insuficientă în sesiune** | Încărcarea de bază (5 W, `pm8150b-charger`) e confirmată, dar sub consumul de sistem în joc (8-11 W); Warp/fast charging lipsește. | Bateria se descarcă lent sub sarcină (~2.7-5.5 ore estimate), nu se menține la infinit chiar cu Peltier alimentat din priză. | Cifrele sunt proiecții - de confirmat pe hardware (Secțiunea 4). Nu presupuneți un bypass de încărcare downstream funcțional pe mainline. |
+| **Fork-ul cu GPU nu are încărcare (și invers)** | `pm8150b-charger` (5 W) funcționează doar pe fork-ul WuerfelDev, care are `&gpu` dezactivat; fork-ul Xo666 (GPU funcțional) nu are deloc nod de charger. | Pe Xo666, bateria se descarcă normal sub sarcină, fără nicio compensare din priză - nu ~2.7-5.5 ore cu Peltier alimentat, ci durata reală a bateriei neasistate. | Nefolosibil ca atare; necesită portarea manuală a nodurilor de charger din WuerfelDev peste DTS-ul Xo666 (Secțiunea 4). Nimeni nu a făcut încă această muncă, din câte se poate verifica. |
 | **Eșec Handshake USB-PD** | Comportament netestat al mux-ului `fcs,fsa4480` la orientare inversă a conectorului. | Posibilă întrerupere a alimentării coolerului Peltier și revenire la throttling. | Marcat OPEN în log-ul de verificare; necesită testare directă pe dispozitiv. |
 
 #### **Protocolul de Recuperare EDL (Emergency Download Mode)**
@@ -296,24 +320,28 @@ Documentul original propunea un bypass de încărcare prin `echo 0 > /sys/class/
 
 ## **6\. Concluzii**
 
-Telefonul chiar boot-ează pe Linux mainline cu accelerare 3D funcțională - asta era singurul lucru
-care putea opri proiectul din start, și răspunsul e da. Dar "mainline" înseamnă aici fork-ul unui
+Telefonul chiar boot-ează pe Linux mainline cu accelerare 3D funcțională - dar doar pe unul dintre
+cele trei fork-uri cunoscute (Xo666), nu universal. Asta era singurul lucru care putea opri
+proiectul din start, și pe acel fork specific răspunsul e da. "Mainline" înseamnă aici fork-ul unui
 singur contributor, nu suport oficial în kernel.org sau în pmaports, iar fluxul de instalare din
 documentul original nu rulează ca atare pe acest device tree.
 
 Convergența dintre driverul grafic Mesa Turnip (cu suport complet Vulkan 1.3 și GPL) și stiva de
 execuție hibridă Proton 11 ARM64 susținută de recompilatorul JIT FEX-Emu rezolvă principalele
-bariere de compatibilitate - capitolul cel mai solid al documentului. Compositorul de gaming
-(fostul "Gamescope" din plan) și clientul Steam ARM64 rămân de asamblat manual - aceasta e acum
-cea mai mare necunoscută a proiectului. Alimentarea telefonului în sesiuni lungi e mai puțin
-riscantă decât se credea inițial: încărcarea de bază la 5 W e confirmată funcțională, doar Warp
-lipsește, iar estimarea realistă e de ordinul a 2.7-5.5 ore de joc cu baterie în scădere lentă, nu
-o necunoscută totală. Coolerul Peltier al GameSir X3 Pro rezolvă oricum jumătatea termică a
-problemei indiferent de rezultatul alimentării, pentru că se alimentează singur de la priză.
-Prin respectarea corecțiilor din acest document și verificarea celor două necunoscute rămase
-(deficitul exact de alimentare, Secțiunea 4, și clientul Steam ARM64, Secțiunea 3) pe hardware
-real, OnePlus 8 poate depăși stadiul de experiment demonstrativ și deveni o consolă portabilă
-funcțională pe Linux mainline.
+bariere de compatibilitate - capitolul cel mai solid al documentului. Dar bariera reală, la data
+verificării, nu mai e nici userspace-ul, nici alimentarea izolat - e faptul că **niciun fork nu are
+simultan GPU și încărcare funcționale**. Xo666, folosit ca referință pentru tot ce ține de grafică
+în acest document, nu are deloc nod de charger; WuerfelDev, fork-ul spre care indică wiki-ul
+pentru încărcare (5 W confirmată, doar Warp lipsește), are `&gpu` dezactivat explicit. Compositorul
+de gaming (fostul "Gamescope" din plan) și clientul Steam ARM64 rămân, la rândul lor, de asamblat
+manual. Coolerul Peltier al GameSir X3 Pro rezolvă oricum jumătatea termică a problemei indiferent
+de rezultatul alimentării, pentru că se alimentează singur de la priză - dar fără o portare a
+nodurilor de charger peste DTS-ul Xo666, telefonul de pe acest fork joacă bine și se descarcă normal,
+fără nicio compensare din priză.
+Prin respectarea corecțiilor din acest document, portarea nodurilor de încărcare din WuerfelDev
+peste DTS-ul Xo666, și verificarea necunoscutei rămase (clientul Steam ARM64, Secțiunea 3) pe
+hardware real, OnePlus 8 poate depăși stadiul de experiment demonstrativ și deveni o consolă
+portabilă funcțională pe Linux mainline.
 
 #### **Lucrări citate**
 

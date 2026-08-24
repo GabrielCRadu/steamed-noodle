@@ -61,16 +61,67 @@ The postmarketOS wiki page for `oneplus-instantnoodle` reports `booting = yes`,
 `packaged = no`, `category = testing`, `pmoskernel = 6.17.0`, and critically
 `status_3d = Y`. Maintainers listed: ObiKeahloa, Xiaoou.
 
-The port lives in two out-of-tree forks:
+The port lives in at least **three** out-of-tree trees, and they do not agree with each other:
 
-- [`github.com/Xo666/mainline-instantnoodle`](https://github.com/Xo666/mainline-instantnoodle) - branch `6.16.7`, pushed 2026-01-14. **Verified to contain `sm8250-oneplus-instantnoodle.dts`.** Authored by `Xiaoou <xo666@postmarketos.org>`, © 2025.
-- [`gitlab.com/ObiKeahloa/linux`](https://gitlab.com/ObiKeahloa/linux/-/tree/sm8250/v6.13-instantnoodle) - branch `sm8250/v6.13-instantnoodle`.
+- [`github.com/Xo666/mainline-instantnoodle`](https://github.com/Xo666/mainline-instantnoodle) - branch `6.16.7`, pushed 2026-01-14, single branch. **This is the tree audited as `reference/dts/sm8250-oneplus-instantnoodle.dts`.** Authored by `Xiaoou <xo666@postmarketos.org>`.
+- [`gitlab.com/ObiKeahloa/linux`](https://gitlab.com/ObiKeahloa/linux/-/tree/sm8250/v6.13-instantnoodle) - branch `sm8250/v6.13-instantnoodle`, single relevant branch on that account. **Not independently audited** - no DTS pulled from this tree yet, only its existence confirmed.
+- [`gitlab.postmarketos.org/WuerfelDev/linux-sm8250`](https://gitlab.postmarketos.org/WuerfelDev/linux-sm8250/-/tree/6.17.0-instantnoodle) - branch `6.17.0-instantnoodle`, the account's **default branch**, last commit 2025-12-11. **This is the tree the wiki Infobox's `pmoskernel = 6.17.0` actually points to** - not either of the two forks originally treated as "the" sources in this log. Pulled and saved as `reference/dts/sm8250-oneplus-instantnoodle-wuerfeldev.dts`.
 
-**This is the project's foundation.** It is one contributor's branch, not an upstream
-guarantee - but the author has a postmarketOS address, which is a reasonable signal the
-work may eventually be packaged.
+**This is the project's foundation, and it's fragmented.** No single tree currently has
+everything working - see the divergence table below. Whoever builds this has to pick a tree
+knowing what they're trading away, not assume "the mainline fork" is one coherent thing.
 
-*Source:* postmarketOS wiki (MediaWiki API); GitHub API.
+#### Fork divergence: what actually works, by tree
+
+Directly diffed `reference/dts/sm8250-oneplus-instantnoodle.dts` (Xo666, `6.16.7`) against
+`reference/dts/sm8250-oneplus-instantnoodle-wuerfeldev.dts` (WuerfelDev, `6.17.0-instantnoodle`,
+pulled 2026-08-24) node by node. ObiKeahloa's tree is not included below - not yet audited.
+
+| Feature | Xo666 `6.16.7` | WuerfelDev `6.17.0-instantnoodle` (wiki's tracked kernel) |
+|---|---|---|
+| **GPU (`&gpu`)** | `status = "okay"`, zap-shader node configured | **`status = "disabled"`, unconditionally, at the top of the file** |
+| **Charger (`&pm8150b_charger`)** | Node does not exist | `status = "okay"`, wired to ADC channels; `&pm8150b_fg` (PMIC-integrated fuel gauge) also `"okay"` |
+| **USB-C SBU mux / orientation-switch** | `status` unset (defaults **okay**); has both `mode-switch` and `orientation-switch`; endpoint wired to `pm8150b_typec_sbu_out` | `status = "disabled"`, comment reads "Currently unconfigured"; endpoint is an empty stub |
+| **Fuel gauge chip** | External `ti,bq27411` @ i2c16 addr 0x55, bus `status = "okay"` | External `ti,bq27541` @ i2c16 addr 0x55 present but bus `status = "disabled"` (vestigial) - real gauge is `&pm8150b_fg` instead |
+| **Panel `compatible` string** | `samsung,amb655uv01` | `oneplus,instantnoodle-panel` (different string, likely a later wrapper/rename - not confirmed to be a different physical driver path) |
+| **Touchscreen, NFC, flash LED** | All present, matches §2 below | Same nodes present (`samsung,s6sy761`, `nxp,nxp-nci-i2c`, `pm8150l_flash`) |
+
+**The practical read: as of 2026-08-24, no tree has GPU, charging, and clean USB-C orientation
+switching all at once.** Xo666 gives you graphics (existential for a gaming project) and a
+correctly-wired SBU mux, but zero charging support. WuerfelDev - the tree the wiki's own status
+badges (`status_3d = Y`, charger `feature-yes`) implicitly describe as "this device" - currently
+ships with **the GPU explicitly disabled in DTS**, which contradicts `status_3d = Y` outright.
+That could be a temporary WIP state (mid-bisect, debugging something unrelated) rather than a
+permanent regression, but it means the wiki's per-feature summary cannot be read as "true of one
+tree simultaneously" - it's more likely an aggregate across forks, possibly not even fully
+current. **For a gaming handheld, Xo666 is the only verified-working starting point for GPU**,
+full stop; treat WuerfelDev as a source to cherry-pick the charger/fuel-gauge nodes from, not as
+a drop-in replacement.
+
+#### A fourth resource: prebuilt firmware + ALSA package
+
+[`github.com/Xo666/linux-oneplus-instantnoodle`](https://github.com/Xo666/linux-oneplus-instantnoodle)
+(same author, separate repo, pushed 2026-01-20) is **not a kernel tree** despite its README
+saying "Mainline Kernel, Firmware package, ALSA configs" - it contains only
+`firmware-oneplus-instantnoodle/usr/lib/firmware/` and `alsa-oneplus-instantnoodle/usr/lib/`.
+The firmware directory actually contains the proprietary signed blobs this log's §3 says must
+be extracted from an OxygenOS dump: `a650_zap.mbn`, `adsp.mbn`, `cdsp.mbn`, `slpi.mbn`,
+`venus.mbn`, plus the open `a650_gmu.bin`/`a650_sqe.fw`.
+
+Two things worth flagging before using it:
+
+- **Path mismatch.** The repo nests the OnePlus blobs under `qcom/sm8250/OnePlus8/`, but the
+  DTS's `firmware-name` properties (confirmed by grepping `reference/dts/`) expect
+  `qcom/sm8250/OnePlus/adsp.mbn` etc. - no digit. Copy or symlink `OnePlus8/` to `OnePlus/`, or
+  the firmware loader won't find any of it.
+- **Provenance.** These are OnePlus/Qualcomm-signed proprietary blobs, redistributed on a public
+  GitHub repo with no stated license for that content. Convenient - skips extracting them from
+  an OxygenOS image yourself - but treat the legal status as unresolved, same as any other
+  redistributed proprietary firmware mirror.
+
+*Source:* postmarketOS wiki (MediaWiki API and full page source supplied by the user);
+GitHub API (`gh api`); GitLab API (`gitlab.com` and `gitlab.postmarketos.org`, both via `curl`);
+direct diff of both DTS files now checked into `reference/dts/`.
 
 ---
 
@@ -87,9 +138,9 @@ Audited against `reference/dts/sm8250-oneplus-instantnoodle.dts` (Xo666 fork, br
 | UFS 3.0 | DTS/wiki declare `jedec,ufs-2.0` | **PARTIAL** |
 | Audio via WCD9385 + LPASS/Hexagon | `qcom,wcd9380-codec` present, **plus** 2× `nxp,tfa9874` speaker amps on i2c15 | **PARTIAL** |
 | ADSP/CDSP firmware needed | Confirmed - `adsp.mbn`, `cdsp.mbn` both required | **CONFIRMED** |
-| Adreno 650 works via Turnip/`msm` | `&gpu status = "okay"`, needs `a650_zap.mbn` | **CONFIRMED** |
+| Adreno 650 works via Turnip/`msm` | `&gpu status = "okay"` **on the Xo666 tree only**, needs `a650_zap.mbn`. Disabled outright on the wiki's own tracked tree - see §1.4 fork divergence table | **CONFIRMED, tree-dependent** |
 | GPU boosts to 670 MHz | 670 MHz is the Snapdragon **865+** clock. Plain 865 tops at 587 MHz | **WRONG** |
-| `pm8150b-charger` manages charging | See update below - **CONFIRMED on the wiki's tracked kernel, absent from our audited DTS** | **PARTIAL** |
+| `pm8150b-charger` manages charging | Absent from Xo666 (audited here); present and `okay` on WuerfelDev's tree - the two trees trade this against GPU. See §1.4 | **PARTIAL, tree-dependent** |
 | USB-C SuperSpeed orientation quirk | `fcs,fsa4480` SBU mux present; orientation behaviour untested | **OPEN** |
 
 ### Update 2026-08-24 (later): full wiki Infobox/feature table obtained
@@ -122,6 +173,13 @@ question and adds hardware the DTS audit above didn't surface:
   DTS audit above found the node absent entirely - treat as effectively non-functional);
   modem, sensors (`slpi` loads unconfigured), haptics all **N**, matching the "known-broken"
   list below.
+
+**Correction to the bullet above (2026-08-24, still later that day):** "not the fully open
+question §4 originally treated it as" undersold what pulling the actual WuerfelDev tree turned
+up. That same tree, at its current HEAD, has **`&gpu { status = "disabled"; }`** - unconditionally.
+The wiki's `status_3d = Y` and this tree's own DTS disagree with each other. Charging at 5 W is
+real on *a* tree; that tree does not currently give you a working GPU. See the fork-divergence
+table in §1.4 - this is the actual state of play, not the charging-only framing above.
 
 ### Additional hardware the doc never mentions
 
@@ -167,7 +225,14 @@ ath11k QCA6390 WiFi, and QCA Bluetooth firmware.
 
 ---
 
-## 4. Power and thermals - narrowed, no longer fully open
+## 4. Power and thermals - narrowed, but now entangled with GPU
+
+> **Read §1.4 before this section.** The "confirmed 5 W charging" finding below comes from the
+> WuerfelDev `6.17.0-instantnoodle` tree, which currently ships with **the GPU disabled in DTS**.
+> The Xo666 tree this whole document otherwise relies on for graphics has the opposite problem:
+> working GPU, zero charger node. As of 2026-08-24 you cannot get both from one unmodified tree.
+> The numbers below describe the charging-capable tree's power budget, not the build this
+> document otherwise recommends.
 
 The document's thermal architecture rests on passthrough power: the GameSir X3 Pro's
 Peltier cooler keeps the SoC at 45-52 °C, so the CPU never throttles, and the phone charges
@@ -202,9 +267,11 @@ The doc's remedies are correspondingly unreliable:
   will almost certainly fail.
 
 **Still resolve at G3/G7 with hardware** - the 5 W figure and the 3-6 W deficit math are both
-still projections, not measurements, and the wiki's own kernel snapshot is one version ahead of
-the DTS audited in this repo. But this is no longer the single biggest open risk; the Steam
-ARM64 client plumbing (§5.2) now carries more uncertainty than charging does.
+still projections, not measurements, taken from a tree (WuerfelDev) that does not currently boot
+this device's GPU. The actual top risk is no longer "does charging work" but **"can the
+charger node from WuerfelDev be ported onto the Xo666 tree without breaking the GPU or the SBU
+mux"** - a merge/patch job nobody has done yet, as far as this log can tell. The Steam ARM64
+client plumbing (§5.2) is the next-biggest source of uncertainty after that.
 
 ---
 
@@ -289,23 +356,34 @@ GPU clock is corrected to 587 MHz, `gamescope` is removed as an install option, 
 ARM64 client section covers the Drakulix fexwrap/SteamRT4 plumbing, and the benchmark table
 carries an explicit "projection, not measurement" caveat.
 
-**Follow-up needed (2026-08-24, later).** The full wiki table obtained after that rewrite
-(§2, §4) confirms base charging works at 5 W and only Warp/fast charging is absent - the
-opposite emphasis from what the doc currently says ("no charger node exists ... will almost
-certainly fail"). The doc's power/charging section, its risk table entry, and the conclusion
-need a follow-up edit to reflect this, plus additions for the newly-confirmed NFC and flash
-LED hardware.
+**Done (2026-08-24), second pass.** The doc's power/charging section, risk table entry, and
+conclusion were updated to the "5 W confirmed, Warp absent" framing, plus NFC and flash LED
+were added to the hardware table.
+
+**Follow-up needed (2026-08-24, third pass - current).** Pulling the actual WuerfelDev tree
+(rather than trusting the wiki's feature table as description of one coherent kernel) found
+that tree ships with **`&gpu` disabled** - so the second pass's charging framing, while
+individually accurate, reads as better news than the project's real state supports. The doc
+needs a further edit: charging and GPU are not simultaneously available from any known
+unmodified tree (§1.4), and that fork-divergence problem - not charging, not Steam ARM64 -
+is now the most fundamental open risk. This is a correction to the *previous* correction, not
+a reversal of it: 5 W charging is still real, it's just real on a tree without graphics.
 
 ## 8. Summary
 
-**Alive.** The device boots mainline with working 3D - that was the one thing that could
-have ended the project, and it's answered. Graphics and compatibility chapters are broadly
-sound, and Valve's Steam Frame work is actively pushing exactly this stack forward.
+**Alive, on the Xo666 tree specifically.** The device boots mainline with working 3D on at
+least one tree - that was the one thing that could have ended the project, and it's answered,
+but not universally: the wiki's own tracked kernel (WuerfelDev) currently ships with the GPU
+disabled. Graphics and compatibility chapters are broadly sound for whoever uses Xo666, and
+Valve's Steam Frame work is actively pushing exactly this stack forward.
 
 **Rewrite required.** The device-enablement chapter is wrong in its central claim: this is
 a fork of mainline maintained by one contributor, not upstream support, and the documented
 install flow does not run. *(Addressed - see §7.)*
 
-**Watch.** The Steam/FEX plumbing (§5.2) is now the most likely place to get stuck. Charging
-(§4) is narrowed to "5 W confirmed, Warp confirmed absent" rather than fully open, but the
-exact net battery-drain rate in a real session is still a projection.
+**Watch.** The project's real bottleneck is **fork fragmentation**: no single tree currently
+has GPU, charging, and clean USB-C orientation switching all working at once (§1.4). Someone
+has to either accept Xo666's "graphics but no charger" tradeoff, or do the work of porting
+WuerfelDev's charger/fuel-gauge nodes onto Xo666's tree - nobody has done that yet, as far as
+this log can tell. The Steam/FEX plumbing (§5.2) is the next-biggest source of uncertainty
+after that.
