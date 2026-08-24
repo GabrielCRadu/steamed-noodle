@@ -64,7 +64,7 @@ The postmarketOS wiki page for `oneplus-instantnoodle` reports `booting = yes`,
 The port lives in at least **three** out-of-tree trees, and they do not agree with each other:
 
 - [`github.com/Xo666/mainline-instantnoodle`](https://github.com/Xo666/mainline-instantnoodle) - branch `6.16.7`, pushed 2026-01-14, single branch. **This is the tree audited as `reference/dts/sm8250-oneplus-instantnoodle.dts`.** Authored by `Xiaoou <xo666@postmarketos.org>`.
-- [`gitlab.com/ObiKeahloa/linux`](https://gitlab.com/ObiKeahloa/linux/-/tree/sm8250/v6.13-instantnoodle) - branch `sm8250/v6.13-instantnoodle`, single relevant branch on that account. **Not independently audited** - no DTS pulled from this tree yet, only its existence confirmed.
+- [`gitlab.com/ObiKeahloa/linux`](https://gitlab.com/ObiKeahloa/linux/-/tree/sm8250/v6.13-instantnoodle) - branch `sm8250/v6.13-instantnoodle`. Its `instantnoodle`-specific commit ("Initial support & bringup") is dated 2025-10-28 - the oldest of the three. Pulled and saved as `reference/dts/sm8250-oneplus-instantnoodle-obikeahloa.dts`.
 - [`gitlab.postmarketos.org/WuerfelDev/linux-sm8250`](https://gitlab.postmarketos.org/WuerfelDev/linux-sm8250/-/tree/6.17.0-instantnoodle) - branch `6.17.0-instantnoodle`, the account's **default branch**, last commit 2025-12-11. **This is the tree the wiki Infobox's `pmoskernel = 6.17.0` actually points to** - not either of the two forks originally treated as "the" sources in this log. Pulled and saved as `reference/dts/sm8250-oneplus-instantnoodle-wuerfeldev.dts`.
 
 **This is the project's foundation, and it's fragmented.** No single tree currently has
@@ -73,30 +73,34 @@ knowing what they're trading away, not assume "the mainline fork" is one coheren
 
 #### Fork divergence: what actually works, by tree
 
-Directly diffed `reference/dts/sm8250-oneplus-instantnoodle.dts` (Xo666, `6.16.7`) against
-`reference/dts/sm8250-oneplus-instantnoodle-wuerfeldev.dts` (WuerfelDev, `6.17.0-instantnoodle`,
-pulled 2026-08-24) node by node. ObiKeahloa's tree is not included below - not yet audited.
+Directly diffed all three `reference/dts/` files node by node (Xo666 `6.16.7`, WuerfelDev
+`6.17.0-instantnoodle`, ObiKeahloa `sm8250/v6.13-instantnoodle`, all pulled 2026-08-24).
 
-| Feature | Xo666 `6.16.7` | WuerfelDev `6.17.0-instantnoodle` (wiki's tracked kernel) |
-|---|---|---|
-| **GPU (`&gpu`)** | `status = "okay"`, zap-shader node configured | **`status = "disabled"`, unconditionally, at the top of the file** |
-| **Charger (`&pm8150b_charger`)** | Node does not exist | `status = "okay"`, wired to ADC channels; `&pm8150b_fg` (PMIC-integrated fuel gauge) also `"okay"` |
-| **USB-C SBU mux / orientation-switch** | `status` unset (defaults **okay**); has both `mode-switch` and `orientation-switch`; endpoint wired to `pm8150b_typec_sbu_out` | `status = "disabled"`, comment reads "Currently unconfigured"; endpoint is an empty stub |
-| **Fuel gauge chip** | External `ti,bq27411` @ i2c16 addr 0x55, bus `status = "okay"` | External `ti,bq27541` @ i2c16 addr 0x55 present but bus `status = "disabled"` (vestigial) - real gauge is `&pm8150b_fg` instead |
-| **Panel `compatible` string** | `samsung,amb655uv01` | `oneplus,instantnoodle-panel` (different string, likely a later wrapper/rename - not confirmed to be a different physical driver path) |
-| **Touchscreen, NFC, flash LED** | All present, matches §2 below | Same nodes present (`samsung,s6sy761`, `nxp,nxp-nci-i2c`, `pm8150l_flash`) |
+| Feature | Xo666 `6.16.7` | WuerfelDev `6.17.0-instantnoodle` (wiki's tracked kernel) | ObiKeahloa `v6.13-instantnoodle` |
+|---|---|---|---|
+| **GPU (`&gpu`)** | `status = "okay"`, **zap-shader node configured** with `firmware-name = "qcom/sm8250/OnePlus/a650_zap.mbn"` | **`status = "disabled"`, unconditionally** | `status = "okay"`, but **no zap-shader node at all anywhere in the file** - the mandatory signed-firmware wiring the doc's own §3 calls a hard prerequisite is simply absent |
+| **Charger (`&pm8150b_charger`)** | Node does not exist | `status = "okay"`, wired to ADC channels | `status = "okay"`, near-identical wiring to WuerfelDev (same ADC channel list); `&pm8150b_fg` also `"okay"` |
+| **USB-C SBU mux / orientation-switch** | `status` unset (defaults **okay**); has both `mode-switch` and `orientation-switch`; endpoint wired to `pm8150b_typec_sbu_out` | `status = "disabled"`, comment reads "Currently unconfigured"; endpoint is an empty stub | Same as WuerfelDev: `status = "disabled"`, identical "Currently unconfigured" comment - the two trees share this block near-verbatim, suggesting one was based on the other |
+| **Fuel gauge chip** | External `ti,bq27411` @ i2c16 addr 0x55, bus `status = "okay"` | External `ti,bq27541` present but bus `status = "disabled"` (vestigial) - real gauge is `&pm8150b_fg` | Same vestigial `bq27541`/disabled-bus pattern as WuerfelDev; real gauge is `&pm8150b_fg`, `status = "okay"` |
+| **Firmware path convention** | `qcom/sm8250/OnePlus/<name>.mbn` (capital O, `.mbn`) | Not directly checked (no zap node) | **`qcom/sm8250/oneplus/<name>.mdt`** - lowercase directory, `.mdt` extension instead of `.mbn`. Firmware blobs packaged for the other two trees are not directly usable here without repackaging. |
+| **Panel `compatible` string** | `samsung,amb655uv01` | `oneplus,instantnoodle-panel` | `oneplus,instantnoodle-panel` (matches WuerfelDev, not Xo666) |
+| **Touchscreen, NFC, flash LED** | All present, matches §2 below | Same nodes present | Same nodes present |
 
-**The practical read: as of 2026-08-24, no tree has GPU, charging, and clean USB-C orientation
-switching all at once.** Xo666 gives you graphics (existential for a gaming project) and a
-correctly-wired SBU mux, but zero charging support. WuerfelDev - the tree the wiki's own status
-badges (`status_3d = Y`, charger `feature-yes`) implicitly describe as "this device" - currently
-ships with **the GPU explicitly disabled in DTS**, which contradicts `status_3d = Y` outright.
-That could be a temporary WIP state (mid-bisect, debugging something unrelated) rather than a
-permanent regression, but it means the wiki's per-feature summary cannot be read as "true of one
-tree simultaneously" - it's more likely an aggregate across forks, possibly not even fully
-current. **For a gaming handheld, Xo666 is the only verified-working starting point for GPU**,
-full stop; treat WuerfelDev as a source to cherry-pick the charger/fuel-gauge nodes from, not as
-a drop-in replacement.
+**The practical read: as of 2026-08-24, no tree cleanly has GPU, charging, and clean USB-C
+orientation switching all at once - ObiKeahloa comes closest on paper but with an asterisk.**
+Xo666 gives you graphics (existential for a gaming project, and the only tree with a *complete*
+zap-shader wiring) and a correctly-wired SBU mux, but zero charging support. WuerfelDev and
+ObiKeahloa both have working chargers and PMIC fuel gauges, and ObiKeahloa's `&gpu` node is not
+disabled - but neither has anything resembling Xo666's zap-shader block, and firmware loading
+for the Adreno GPU is a hard, signed-blob prerequisite (§3). Whether the kernel's `msm_gpu`/`a6xx`
+driver falls back to a sane default firmware path when the DT omits `firmware-name` is a genuine
+unknown, not something this log can resolve by reading device trees - it needs testing on
+hardware. Until that's tested, **treat ObiKeahloa's GPU support as unconfirmed, not working**,
+despite `status = "okay"`; Xo666 remains the only tree with *demonstrated* graphics. WuerfelDev's
+`status_3d = Y` on the wiki, given its DTS has the GPU node hard-disabled, is best read as
+describing the device in general (i.e. some tree boots 3D) rather than describing that specific
+kernel snapshot - the wiki's per-feature table is not a description of one coherent, buildable
+kernel.
 
 #### A fourth resource: prebuilt firmware + ALSA package
 
@@ -381,9 +385,13 @@ Valve's Steam Frame work is actively pushing exactly this stack forward.
 a fork of mainline maintained by one contributor, not upstream support, and the documented
 install flow does not run. *(Addressed - see §7.)*
 
-**Watch.** The project's real bottleneck is **fork fragmentation**: no single tree currently
-has GPU, charging, and clean USB-C orientation switching all working at once (§1.4). Someone
-has to either accept Xo666's "graphics but no charger" tradeoff, or do the work of porting
-WuerfelDev's charger/fuel-gauge nodes onto Xo666's tree - nobody has done that yet, as far as
-this log can tell. The Steam/FEX plumbing (§5.2) is the next-biggest source of uncertainty
-after that.
+**Watch.** The project's real bottleneck is **fork fragmentation**: no tree cleanly has GPU,
+charging, and clean USB-C orientation switching all working at once (§1.4). A third tree
+(ObiKeahloa) has charging AND an enabled `&gpu` node simultaneously - the closest match so
+far - but its DTS has no zap-shader firmware wiring at all, which every other part of this
+document treats as a hard requirement for the GPU to actually initialize. That makes
+ObiKeahloa's graphics support unconfirmed, not a proven win. Until someone tests ObiKeahloa
+on real hardware, or ports Xo666's zap-shader block onto it, or ports WuerfelDev/ObiKeahloa's
+charger nodes onto Xo666, **Xo666 remains the only tree with demonstrated graphics** and stays
+this document's reference. The Steam/FEX plumbing (§5.2) is the next-biggest source of
+uncertainty after the fork-merge problem.

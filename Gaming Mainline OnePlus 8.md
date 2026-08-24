@@ -19,17 +19,19 @@ Suportul real pentru `instantnoodle` (codul OnePlus 8 standard) trăiește în c
 fork-uri neoficiale, în afara pmaports și a kernelului postmarketOS oficial - și nu sunt de
 acord unele cu altele:
 
-- [`github.com/Xo666/mainline-instantnoodle`](https://github.com/Xo666/mainline-instantnoodle) (branch `6.16.7`), care conține `sm8250-oneplus-instantnoodle.dts` - acesta e device tree-ul folosit ca referință principală în acest document (vezi `reference/dts/`), pentru că e **singurul cu GPU-ul confirmat funcțional**.
-- [`gitlab.com/ObiKeahloa/linux`](https://gitlab.com/ObiKeahloa/linux/-/tree/sm8250/v6.13-instantnoodle) (branch `sm8250/v6.13-instantnoodle`) - neauditat independent încă.
+- [`github.com/Xo666/mainline-instantnoodle`](https://github.com/Xo666/mainline-instantnoodle) (branch `6.16.7`), care conține `sm8250-oneplus-instantnoodle.dts` - acesta e device tree-ul folosit ca referință principală în acest document (vezi `reference/dts/`), pentru că e **singurul cu GPU dovedit funcțional** (zap-shader complet configurat).
+- [`gitlab.com/ObiKeahloa/linux`](https://gitlab.com/ObiKeahloa/linux/-/tree/sm8250/v6.13-instantnoodle) (branch `sm8250/v6.13-instantnoodle`) - are simultan `&gpu status = "okay"` **și** încărcare funcțională (`pm8150b_charger`), combinația cea mai apropiată de ideal. Dar DTS-ul **nu conține deloc un nod zap-shader** - firmware-ul semnat obligatoriu pentru GPU (Secțiunea 1, tabelul de firmware) nu are unde să fie declarat. Tratați GPU-ul de aici ca neconfirmat, nu ca funcțional, până nu e testat pe hardware real.
 - [`gitlab.postmarketos.org/WuerfelDev/linux-sm8250`](https://gitlab.postmarketos.org/WuerfelDev/linux-sm8250/-/tree/6.17.0-instantnoodle) (branch implicit `6.17.0-instantnoodle`) - acesta e fork-ul spre care indică efectiv câmpul `pmoskernel = 6.17.0` de pe wiki-ul postmarketOS, nu cele de mai sus. Are încărcare funcțională, dar **GPU-ul e dezactivat explicit în DTS** (`&gpu { status = "disabled"; }`) - vezi caseta de mai jos.
 
 > **Cel mai important lucru de reținut din toată Secțiunea 1:** niciun fork, la data verificării,
-> nu are simultan GPU funcțional, încărcare funcțională, și comutare corectă de orientare USB-C.
-> Xo666 (folosit ca referință aici) are GPU și USB-C funcționale, dar zero încărcare. WuerfelDev
-> are încărcare funcțională, dar GPU dezactivat - ceea ce contrazice direct `status_3d = Y` de pe
-> wiki. Cine construiește acest proiect trebuie fie să accepte lipsa de încărcare pe Xo666, fie să
-> porteze manual nodurile de charger din WuerfelDev peste DTS-ul Xo666 - o muncă de merge/patch
-> care, din câte se poate verifica, nimeni n-a făcut-o încă.
+> nu are simultan GPU dovedit funcțional, încărcare funcțională, și comutare corectă de orientare
+> USB-C. Xo666 (folosit ca referință aici) are GPU dovedit și USB-C funcționale, dar zero
+> încărcare. WuerfelDev și ObiKeahloa au încărcare funcțională, dar WuerfelDev are GPU dezactivat
+> explicit, iar ObiKeahloa are GPU activat dar fără firmware-ul semnat declarat (deci neconfirmat).
+> Cine construiește acest proiect trebuie fie să accepte lipsa de încărcare pe Xo666, fie să
+> porteze manual nodurile de charger peste DTS-ul Xo666, fie să testeze dacă GPU-ul de pe
+> ObiKeahloa chiar pornește - nimeni n-a făcut încă niciuna dintre acestea, din câte se poate
+> verifica.
 
 Wiki-ul postmarketOS confirmă că dispozitivul boot-ează (`booting = yes`) cu 3D funcțional (`status_3d = Y`), dar îl marchează `packaged = no` și `category = testing` - adică **nu există un pachet `device-oneplus-instantnoodle` în pmaports**. Pachetele OnePlus care chiar există sunt `device-oneplus-enchilada` (6), `device-oneplus-fajita` (6T), `device-oneplus-bacon` (One), `device-oneplus-billie2` (Nord N100), `device-oneplus-guacamole` (7 Pro), `device-oneplus-instantnoodlep` (**8 Pro**) și `device-oneplus-kebab` (**8T**). OnePlus 8 standard nu e printre ele. Fluxul de instalare din Secțiunea 5 trebuie tratat ca instalare dintr-un fork, nu ca `pmbootstrap init` standard.
 
