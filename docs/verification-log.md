@@ -89,8 +89,39 @@ Audited against `reference/dts/sm8250-oneplus-instantnoodle.dts` (Xo666 fork, br
 | ADSP/CDSP firmware needed | Confirmed - `adsp.mbn`, `cdsp.mbn` both required | **CONFIRMED** |
 | Adreno 650 works via Turnip/`msm` | `&gpu status = "okay"`, needs `a650_zap.mbn` | **CONFIRMED** |
 | GPU boosts to 670 MHz | 670 MHz is the Snapdragon **865+** clock. Plain 865 tops at 587 MHz | **WRONG** |
-| `pm8150b-charger` manages charging | **No charger node exists in this DTS at all** | **OPEN** - see §4 |
+| `pm8150b-charger` manages charging | See update below - **CONFIRMED on the wiki's tracked kernel, absent from our audited DTS** | **PARTIAL** |
 | USB-C SuperSpeed orientation quirk | `fcs,fsa4480` SBU mux present; orientation behaviour untested | **OPEN** |
+
+### Update 2026-08-24 (later): full wiki Infobox/feature table obtained
+
+The user supplied the complete `oneplus-instantnoodle` wiki page source (Infobox + feature
+tables), not just the summary previously scraped via the MediaWiki API. This resolves one open
+question and adds hardware the DTS audit above didn't surface:
+
+- **Charging is explicitly `feature-yes` on the wiki**: "Charger | `qcom,pm8150b-charger` |
+  Allows charging at 5W". Fast charging is separately listed and marked `feature-no`:
+  "`oplus,stm8s-fastcg` | Enables 5V6A/Warp Charging, currently no driver exists". So base
+  charging at 5 W is a confirmed, working feature - not the fully open question §4 originally
+  treated it as. Only Warp/fast charging is confirmed absent.
+- **This does not contradict the DTS finding above so much as date it.** The wiki's Infobox
+  declares `pmoskernel = 6.17.0`, which points at a different, newer kernel tree
+  (`gitlab.postmarketos.org/WuerfelDev/linux-sm8250`, tag `6.17.0-instantnoodle`) than the
+  `reference/dts/` snapshot audited in this repo (Xo666 fork, branch `6.16.7`). The charger
+  node most likely landed between those two trees. Treat `reference/dts/sm8250-oneplus-instantnoodle.dts`
+  as one version behind the currently wiki-tracked kernel on this specific point.
+- **NFC confirmed working**: `nxp,nxp-nci-i2c` @ 0x28 on i2c1 - **absent from the document
+  and from this log entirely until now.**
+- **Flash LED confirmed working**: `qcom,spmi-flash-led`, wired through the `pm8150l` PMIC's
+  SPMI bus - also previously unmentioned.
+- **Audio bus addresses pinned down**: both `nxp,tfa9874` amps sit on i2c15, earpiece at
+  0x34 and main speaker at 0x35 - consistent with, and more precise than, the DTS audit above.
+- **SBU mux (`fcs,fsa4480`) address given**: 0x42 on i2c15 (the DTS audit only confirmed its
+  presence, not its address).
+- Full feature matrix from the wiki, for completeness: screen, battery, front camera, GPU,
+  WiFi, Bluetooth, USB OTG all **Y**; rear camera **P** (marked partial on the wiki, though the
+  DTS audit above found the node absent entirely - treat as effectively non-functional);
+  modem, sensors (`slpi` loads unconfigured), haptics all **N**, matching the "known-broken"
+  list below.
 
 ### Additional hardware the doc never mentions
 
@@ -99,7 +130,10 @@ Audited against `reference/dts/sm8250-oneplus-instantnoodle.dts` (Xo666 fork, br
 - **`&pm8150b_vbus`**, 500 mA-3 A source regulator - the phone can power USB accessories (OTG out).
 - **Battery**: `simple-battery`, 16.37 Wh design energy, 4270 mAh, 3.4-4.435 V.
 - **Fuel gauge**: `ti,bq27411` - accurate charge reporting.
-- **Front camera only** (`sony,imx471`). Rear `imx586` is absent from the DTS.
+- **Front camera only** confirmed functional (`sony,imx471`). Rear `imx586` is absent from
+  the audited DTS and marked only partial on the wiki.
+- **NFC**: `nxp,nxp-nci-i2c` @ 0x28 on i2c1.
+- **Flash LED**: `qcom,spmi-flash-led` via the pm8150l PMIC.
 
 ### Known-broken, per wiki
 
@@ -133,7 +167,7 @@ ath11k QCA6390 WiFi, and QCA Bluetooth firmware.
 
 ---
 
-## 4. Power and thermals - the biggest open question
+## 4. Power and thermals - narrowed, no longer fully open
 
 The document's thermal architecture rests on passthrough power: the GameSir X3 Pro's
 Peltier cooler keeps the SoC at 45-52 °C, so the CPU never throttles, and the phone charges
@@ -141,19 +175,22 @@ through the controller meanwhile. The cooling half of that is sound - the Peltie
 10-12 W **from the wall charger, not from the phone**, so active cooling works regardless
 of what the phone's charging stack does.
 
-The charging half is unverified and looks doubtful:
+The charging half was flagged OPEN in the first pass of this log, because the wiki's summary
+claimed 5 W charging while the Xo666 DTS audited in `reference/dts/` declared no charger node
+at all. **The full wiki feature table (obtained later, §2) resolves this**: base charging via
+`qcom,pm8150b-charger` is listed as a confirmed, working feature at **5 W**. Only Warp/fast
+charging (`oplus,stm8s-fastcg`, 5V/6A) is confirmed absent - "currently no driver exists," per
+the wiki itself. The likely explanation for the DTS discrepancy: the wiki's Infobox declares
+`pmoskernel = 6.17.0`, a newer kernel snapshot than the `6.16.7` Xo666 branch this repo
+audited; the charger node most likely landed in that gap. `pm8150b_typec` (present in the
+audited DTS) also declares sink PDOs of `PDO_FIXED(5000, 3000)` (5 V/3 A) plus
+`PDO_VAR(5000, 12000, 5000)` (5-12 V variable) and `op-sink-microwatt = <10000000>`.
 
-- The wiki reports charging works at **5 W** via `qcom,pm8150b-charger`, and that Warp/fast
-  charging needs `oplus,stm8s-fastcg`, **for which no driver exists**.
-- But the Xo666 DTS **declares no charger node whatsoever**. It configures `pm8150b_typec`
-  with sink PDOs of `PDO_FIXED(5000, 3000)` (5 V/3 A) plus `PDO_VAR(5000, 12000, 5000)`
-  (5-12 V variable), and `op-sink-microwatt = <10000000>` - but PD sink advertisement is
-  not the same thing as a driver that charges the battery.
-
-**What this means practically:** at a system draw of 8-11 W under load against an input
-that may be as low as 5 W, on a 16.37 Wh battery, expect roughly **3 hours of play while
-slowly draining** - not indefinite gaming. Sessions are viable; "plug in and play forever"
-is not established.
+**What this means practically:** at a system draw of 8-11 W under load against a confirmed
+5 W input, net deficit is 3-6 W. On a 16.37 Wh battery that's roughly **2.7-5.5 hours of play
+while slowly draining** - narrower and more grounded than the original "maybe it doesn't charge
+at all" framing, but still not indefinite. "Plug in and play forever" remains unestablished;
+"plug in and roughly double your unplugged session length" is now the reasonable claim.
 
 The doc's remedies are correspondingly unreliable:
 
@@ -164,7 +201,10 @@ The doc's remedies are correspondingly unreliable:
   `power_supply` exposes `charge_control_limit` / `input_current_limit` instead. This command
   will almost certainly fail.
 
-**Resolve at G3/G7 with hardware.** This is the top open risk for the handheld use case.
+**Still resolve at G3/G7 with hardware** - the 5 W figure and the 3-6 W deficit math are both
+still projections, not measurements, and the wiki's own kernel snapshot is one version ahead of
+the DTS audited in this repo. But this is no longer the single biggest open risk; the Steam
+ARM64 client plumbing (§5.2) now carries more uncertainty than charging does.
 
 ---
 
@@ -241,14 +281,20 @@ translation overhead, which is the larger unknown. Treat the table as an upper b
 
 ## 7. Rewrite status
 
-**Done (2026-08-24).** [`Gaming Mainline OnePlus 8.md`](../Gaming%20Mainline%20OnePlus%208.md)
-has been corrected in place against every WRONG/PARTIAL/OPEN item logged above: the
+**Done (2026-08-24), first pass.** [`Gaming Mainline OnePlus 8.md`](../Gaming%20Mainline%20OnePlus%208.md)
+was corrected against every WRONG/PARTIAL/OPEN item logged at that point: the
 device-enablement chapter now describes the Xo666/ObiKeahloa forks instead of a fictional
 `pmbootstrap init instantnoodle` flow, touchscreen/panel/audio/UFS claims match the DTS,
-GPU clock is corrected to 587 MHz, the charging section is rewritten around "no charger
-node exists" instead of a downstream sysfs bypass, `gamescope` is removed as an install
-option, the Steam ARM64 client section now covers the Drakulix fexwrap/SteamRT4 plumbing,
-and the benchmark table carries an explicit "projection, not measurement" caveat.
+GPU clock is corrected to 587 MHz, `gamescope` is removed as an install option, the Steam
+ARM64 client section covers the Drakulix fexwrap/SteamRT4 plumbing, and the benchmark table
+carries an explicit "projection, not measurement" caveat.
+
+**Follow-up needed (2026-08-24, later).** The full wiki table obtained after that rewrite
+(§2, §4) confirms base charging works at 5 W and only Warp/fast charging is absent - the
+opposite emphasis from what the doc currently says ("no charger node exists ... will almost
+certainly fail"). The doc's power/charging section, its risk table entry, and the conclusion
+need a follow-up edit to reflect this, plus additions for the newly-confirmed NFC and flash
+LED hardware.
 
 ## 8. Summary
 
@@ -258,7 +304,8 @@ sound, and Valve's Steam Frame work is actively pushing exactly this stack forwa
 
 **Rewrite required.** The device-enablement chapter is wrong in its central claim: this is
 a fork of mainline maintained by one contributor, not upstream support, and the documented
-install flow does not run.
+install flow does not run. *(Addressed - see §7.)*
 
-**Watch.** Charging behaviour (§4) is the top unknown, and the Steam/FEX plumbing (§5.2) is
-the most likely place to get stuck.
+**Watch.** The Steam/FEX plumbing (§5.2) is now the most likely place to get stuck. Charging
+(§4) is narrowed to "5 W confirmed, Warp confirmed absent" rather than fully open, but the
+exact net battery-drain rate in a real session is still a projection.

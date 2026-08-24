@@ -27,11 +27,15 @@ Wiki-ul postmarketOS confirmă că dispozitivul boot-ează (`booting = yes`) cu 
 | **Display (DSI/KMS)** | Funcțional | msm_drm, panel `samsung,amb655uv01` | O singură bandă MIPI-DSI (`mdss_dsi0`), nu două. 1080x2400 la 60/90 Hz confirmat. |
 | **Touchscreen** | Funcțional | `samsung,s6sy761` la adresa 0x48 pe i2c13 | Nu e goodix și nu e synaptics_dsx - e un controller Samsung dedicat. |
 | **Stocare UFS** | Funcțional | ufs_qcom | DTS și wiki declară `jedec,ufs-2.0`, nu UFS 3.0. |
-| **USB-C OTG / USB 3.0** | Funcțional, cu quirk | qcom-pmic-typec / dwc3-qcom | Mux `fcs,fsa4480` prezent pe SBU; comportamentul de orientare e neverificat pe hardware. |
-| **USB-PD (Power Delivery)** | Sink PD declarat, **încărcare neconfirmată** | `pm8150b_typec` | **Niciun nod de charger nu există în acest DTS.** Sink advertisement nu înseamnă driver de încărcare. Vezi Secțiunea 4. |
-| **Audio ALSA/PipeWire** | Funcțional Condiționat | qcom-lpass / `qcom,wcd9380-codec` | Codec e WCD9380, nu WCD9385; plus 2x amplificatoare de difuzor `nxp,tfa9874` pe i2c15, absente din doc inițial. |
+| **USB-C OTG / USB 3.0** | Funcțional, cu quirk | qcom-pmic-typec / dwc3-qcom | Mux `fcs,fsa4480` @ 0x42 pe i2c15; comportamentul de orientare e neverificat pe hardware. |
+| **USB-PD (Power Delivery) / Încărcare** | **Confirmată la 5 W** | `qcom,pm8150b-charger` | Wiki-ul o listează explicit ca funcțională. Doar încărcarea rapidă Warp (`oplus,stm8s-fastcg`, 5V/6A) lipsește - "no driver exists". Vezi Secțiunea 4. |
+| **Audio ALSA/PipeWire** | Funcțional Condiționat | qcom-lpass / `qcom,wcd9380-codec` | Codec e WCD9380, nu WCD9385; plus 2x amplificatoare de difuzor `nxp,tfa9874` pe i2c15 (0x34 cască internă, 0x35 difuzor principal), absente din doc inițial. |
+| **NFC** | Funcțional | `nxp,nxp-nci-i2c` @ 0x28 pe i2c1 | Absent complet din documentul original. |
+| **Flash LED** | Funcțional | `qcom,spmi-flash-led` | Conectat prin magistrala SPMI a PMIC-ului pm8150l; absent din documentul original. |
 
-Hardware suplimentar prezent în DTS și absent din documentul inițial: **DisplayPort alt-mode** activ pe USB-C (`&mdss_dp`), regulator `pm8150b_vbus` care poate alimenta accesorii USB (OTG sursă, 500 mA-3 A), baterie `simple-battery` de 16.37 Wh / 4270 mAh / 3.4-4.435 V, și fuel gauge `ti,bq27411` pentru raportare exactă a încărcării. Camera frontală (`sony,imx471`) e prezentă; **camera spate (imx586) lipsește complet din DTS**.
+Hardware suplimentar prezent în DTS/wiki și absent din documentul inițial: **DisplayPort alt-mode** activ pe USB-C (`&mdss_dp`), regulator `pm8150b_vbus` care poate alimenta accesorii USB (OTG sursă, 500 mA-3 A), baterie `simple-battery` de 16.37 Wh / 4270 mAh / 3.4-4.435 V, fuel gauge `ti,bq27411` pentru raportare exactă a încărcării, NFC și flash LED (ambele de mai sus). Camera frontală (`sony,imx471`) e prezentă; **camera spate (imx586) lipsește din DTS-ul auditat și e marcată doar parțial pe wiki**.
+
+> **Notă despre versiuni de kernel:** device tree-ul auditat local (`reference/dts/`, fork Xo666, branch `6.16.7`) nu conținea niciun nod de charger, ceea ce a dus inițial la concluzia greșită "încărcarea nu e confirmată". Wiki-ul postmarketOS declară însă `pmoskernel = 6.17.0` - un snapshot de kernel mai nou (fork WuerfelDev), care evident include nodul de charger. Tratați `reference/dts/` ca fiind cu o versiune în urmă față de ce rulează efectiv wiki-ul pe acest punct.
 
 Cunoscute ca nefuncționale, conform wiki-ului: modem (`sdx55m`), senzori (nodul `slpi` se încarcă dar nu e configurat), haptice (`awinic,aw8697`), camera spate. Pentru un handheld dedicat, niciuna dintre acestea nu contează, cu excepția hapticelor - o pierdere de confort, nu una funcțională.
 
@@ -49,8 +53,8 @@ Subsistemul de stocare este gestionat prin driverul ufs\_qcom, dar DTS-ul și wi
 
 Managementul portului USB Type-C pe OnePlus 8 prezintă riscuri structurale în contextul andocării controllerului de joc:
 
-> 1. Quirk-ul de multiplexare SuperSpeed: pe placă există un mux dedicat `fcs,fsa4480` pentru liniile SBU, prezent în DTS. Comportamentul lui exact la orientare inversă a conectorului nu a fost testat pe hardware real (marcat **OPEN** în log-ul de verificare) - tratați presupunerea de mai jos ca ipoteză, nu ca fapt confirmat: liniile USB 3.0 (5 Gbps) s-ar activa exclusiv dacă orientarea raportată în /sys/class/typec/port0/orientation indică starea normală (*normal*), iar la inserare inversă subsistemul ar cădea în USB 2.0 (480 Mbps). Lățimea de bandă USB 2.0 e oricum suficientă pentru HID.
-> 2. **Nu există niciun nod de charger în acest device tree.** `pm8150b_typec` declară doar PDO-uri de sink (5V/3A fix, plus 5-12V variabil) - adică telefonul poate *cere* putere prin PD, dar afirmarea unui profil de sink nu e totuna cu a avea un driver care încarcă efectiv bateria. Presupunerea documentului original, că `pm8150b-charger` gestionează încărcarea și că problema e o "mașină de stări instabilă", nu poate fi confirmată din DTS - vezi analiza completă în Secțiunea 4.
+> 1. Quirk-ul de multiplexare SuperSpeed: pe placă există un mux dedicat `fcs,fsa4480` (adresa 0x42, pe i2c15) pentru liniile SBU, prezent în DTS. Comportamentul lui exact la orientare inversă a conectorului nu a fost testat pe hardware real (marcat **OPEN** în log-ul de verificare) - tratați presupunerea de mai jos ca ipoteză, nu ca fapt confirmat: liniile USB 3.0 (5 Gbps) s-ar activa exclusiv dacă orientarea raportată în /sys/class/typec/port0/orientation indică starea normală (*normal*), iar la inserare inversă subsistemul ar cădea în USB 2.0 (480 Mbps). Lățimea de bandă USB 2.0 e oricum suficientă pentru HID.
+> 2. **Încărcarea de bază funcționează, dar e limitată.** Wiki-ul postmarketOS confirmă explicit `qcom,pm8150b-charger` ca funcțional, la 5 W. Presupunerea documentului original, că problema ar fi o "mașină de stări instabilă" la comutarea sink/source, nu are confirmare - problema reală e alta: 5 W e sub consumul de sistem în joc (8-11 W), nu o eroare de negociere. Încărcarea rapidă Warp (`oplus,stm8s-fastcg`) rămâne neimplementată. `pm8150b_typec` declară PDO-uri de sink de 5V/3A fix plus 5-12V variabil. Analiza completă e în Secțiunea 4.
 
 ### **Arhitectura Audio: DSP Hexagon, ALSA și PipeWire**
 
@@ -186,31 +190,40 @@ telefonului - deci jumătatea de răcire a acestui argument rămâne validă ind
 întâmplă cu stiva de încărcare a telefonului. Jumătatea de alimentare e altă poveste, tratată
 separat mai jos.
 
-### **Alimentare în timpul sesiunii: cea mai mare necunoscută**
+### **Alimentare în timpul sesiunii: limitată, nu absentă**
 
 Documentul original presupunea că telefonul se încarcă prin controller (*pass-through power*) cât
-timp Peltier-ul răcește, susținând sesiuni "nelimitate". Verificarea nu poate confirma asta:
+timp Peltier-ul răcește, susținând sesiuni "nelimitate". O verificare anterioară a acestui document
+concluzionase, greșit, că încărcarea ar putea să nu funcționeze deloc, pentru că device tree-ul
+auditat local (fork Xo666, `6.16.7`) nu avea niciun nod de charger. Tabelul complet de pe wiki-ul
+postmarketOS clarifică situația:
 
-* Wiki-ul postmarketOS raportează încărcare la **5 W** prin `qcom,pm8150b-charger`, cu mențiunea
-  că încărcarea rapidă Warp are nevoie de `oplus,stm8s-fastcg`, **pentru care nu există driver**.
-* Device tree-ul verificat (Xo666) **nu declară niciun nod de charger**. Configurează doar
-  `pm8150b_typec` ca sink PD (5V/3A fix, plus 5-12V variabil) - ceea ce înseamnă că telefonul poate
-  *cere* curent, nu neapărat că îl și transformă în încărcare a bateriei.
-* La un consum de sistem de 8-11 W sub sarcină, contra unei intrări posibil limitate la 5 W, pe o
-  baterie de 16.37 Wh, calculul dă aproximativ **3 ore de joc cu baterie în scădere lentă**, nu
-  sesiuni nelimitate. Sesiunile scurte-medii sunt realiste; "bagă-l în priză și joacă la infinit" nu
-  e o certitudine pe acest kernel.
+* **Încărcarea de bază funcționează, confirmat, la 5 W**, prin `qcom,pm8150b-charger` - wiki-ul o
+  listează explicit ca funcțională ("Allows charging at 5W"), nu doar o raportează ca posibilă.
+* **Doar încărcarea rapidă Warp e confirmat absentă**: `oplus,stm8s-fastcg` (5V/6A) - "currently no
+  driver exists", per wiki.
+* Discrepanța cu DTS-ul auditat local se explică probabil prin versiune: wiki-ul declară
+  `pmoskernel = 6.17.0`, un snapshot de kernel (fork WuerfelDev) mai nou decât branch-ul `6.16.7` al
+  fork-ului Xo666 folosit ca referință în acest repo. Nodul de charger a apărut probabil între cele
+  două.
+* La un consum de sistem de 8-11 W sub sarcină, contra unei intrări confirmate de 5 W, deficitul net
+  e de 3-6 W. Pe o baterie de 16.37 Wh, calculul dă aproximativ **2.7-5.5 ore de joc cu baterie în
+  scădere lentă** - nu sesiuni nelimitate, dar nici o necunoscută totală. "Bagă-l în priză și joacă
+  la infinit" rămâne nefondat; "bagă-l în priză și aproape dublează durata sesiunii" e afirmația
+  rezonabilă acum.
 
 Remediile propuse inițial trebuie tratate cu scepticism:
 
 * Fixarea profilului PD la 5V/3A prin patch DTS - DTS-ul deja declară exact acest profil; nu există
-  dovadă că asta ar fi problema.
+  dovadă că asta ar fi problema. Problema reală nu e o negociere eșuată, ci pur și simplu 5 W sub
+  consumul de sistem în joc.
 * Comanda `echo 0 > /sys/class/power_supply/battery/charging_enabled` - acesta e un nod **sysfs
   downstream** (Android/CAF), care nu există în kernelul mainline. `power_supply` din mainline expune
   în schimb `charge_control_limit` / `input_current_limit`. Comanda de mai sus va eșua aproape sigur.
 
-**De rezolvat cu telefonul fizic în mână.** Aceasta rămâne cea mai mare necunoscută pentru
-utilizarea ca handheld.
+**Cifrele de 5 W și deficitul de 3-6 W rămân proiecții, nu măsurători** - de confirmat cu telefonul
+fizic în mână. Dar aceasta nu mai e cea mai mare necunoscută a proiectului; acel loc e acum ocupat
+de plumbing-ul clientului Steam ARM64 (Secțiunea 3).
 
 ### **Arhitectura Subsistemului de Input**
 
@@ -269,7 +282,7 @@ Jocurile pe 32 de biți Direct3D 9 (*Fallout: New Vegas*) și titlurile 2D/izome
 | Risc Tehnic Identificat | Mecanism Cauzal | Impact Asupra Sistemului | Protocol Tehnic de Remediere / Mitigare |
 | :---- | :---- | :---- | :---- |
 | **Coruperea Tabelei GPT UFS** | Suprascrierea necorespunzătoare a volumelor dinamice super/userdata. | Dispozitiv blocat complet (*Hard-Brick*); lipsă răspuns Fastboot. | Forțare în mod EDL (Qualcomm HS-USB QDLoader 9008) și rescriere GPT via bkerler/edl sau OnePlus MSM Download Tool. |
-| **Alimentare insuficientă în sesiune** | Nu există niciun nod de charger în device tree-ul verificat; sink PD declarat nu garantează încărcare reală. | Bateria se descarcă sub sarcină (~3 ore estimate), nu se menține la infinit chiar cu Peltier alimentat din priză. | Nerezolvat pe kernelul actual - de investigat pe hardware (Secțiunea 4). Nu presupuneți un bypass de încărcare funcțional. |
+| **Alimentare insuficientă în sesiune** | Încărcarea de bază (5 W, `pm8150b-charger`) e confirmată, dar sub consumul de sistem în joc (8-11 W); Warp/fast charging lipsește. | Bateria se descarcă lent sub sarcină (~2.7-5.5 ore estimate), nu se menține la infinit chiar cu Peltier alimentat din priză. | Cifrele sunt proiecții - de confirmat pe hardware (Secțiunea 4). Nu presupuneți un bypass de încărcare downstream funcțional pe mainline. |
 | **Eșec Handshake USB-PD** | Comportament netestat al mux-ului `fcs,fsa4480` la orientare inversă a conectorului. | Posibilă întrerupere a alimentării coolerului Peltier și revenire la throttling. | Marcat OPEN în log-ul de verificare; necesită testare directă pe dispozitiv. |
 
 #### **Protocolul de Recuperare EDL (Emergency Download Mode)**
@@ -291,16 +304,16 @@ documentul original nu rulează ca atare pe acest device tree.
 Convergența dintre driverul grafic Mesa Turnip (cu suport complet Vulkan 1.3 și GPL) și stiva de
 execuție hibridă Proton 11 ARM64 susținută de recompilatorul JIT FEX-Emu rezolvă principalele
 bariere de compatibilitate - capitolul cel mai solid al documentului. Compositorul de gaming
-(fostul "Gamescope" din plan) și clientul Steam ARM64 rămân de asamblat manual, iar cea mai mare
-necunoscută rămâne alimentarea telefonului în sesiuni lungi: nu există dovadă de driver de
-încărcare funcțional pe kernelul verificat, deci "bagă-l în priză și joacă la infinit" nu e o
-certitudine - estimarea realistă e de ordinul a 3 ore de joc cu baterie în scădere lentă. Coolerul
-Peltier al GameSir X3 Pro rezolvă totuși jumătatea termică a problemei indiferent de rezultatul
-alimentării, pentru că se alimentează singur de la priză.
+(fostul "Gamescope" din plan) și clientul Steam ARM64 rămân de asamblat manual - aceasta e acum
+cea mai mare necunoscută a proiectului. Alimentarea telefonului în sesiuni lungi e mai puțin
+riscantă decât se credea inițial: încărcarea de bază la 5 W e confirmată funcțională, doar Warp
+lipsește, iar estimarea realistă e de ordinul a 2.7-5.5 ore de joc cu baterie în scădere lentă, nu
+o necunoscută totală. Coolerul Peltier al GameSir X3 Pro rezolvă oricum jumătatea termică a
+problemei indiferent de rezultatul alimentării, pentru că se alimentează singur de la priză.
 Prin respectarea corecțiilor din acest document și verificarea celor două necunoscute rămase
-(alimentarea, Secțiunea 4, și clientul Steam ARM64, Secțiunea 3) pe hardware real, OnePlus 8 poate
-depăși stadiul de experiment demonstrativ și deveni o consolă portabilă funcțională pe Linux
-mainline.
+(deficitul exact de alimentare, Secțiunea 4, și clientul Steam ARM64, Secțiunea 3) pe hardware
+real, OnePlus 8 poate depăși stadiul de experiment demonstrativ și deveni o consolă portabilă
+funcțională pe Linux mainline.
 
 #### **Lucrări citate**
 
