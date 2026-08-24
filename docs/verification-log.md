@@ -396,14 +396,53 @@ GPU, or any of the runtime claims elsewhere in this log - only that the source c
 with this defconfig and toolchain. Module build (`modules`) and a full `dtbs_install` pass were
 not run in this check; only the two artifacts actually needed to test-boot the device were built.
 
-Draft pmaports packaging (not yet run through `abuild`/`pmbootstrap`, based on the packaged
-`device-oneplus-instantnoodlep` port as a template) is checked in at `pmaports/` -
-`device-oneplus-instantnoodle/` and `linux-oneplus-instantnoodle/`. The bootimg flash offsets and
-super-partition path were cross-checked against the actual `by-name` partition dump for a real
-OnePlus 8 the user supplied earlier and match `instantnoodlep`'s values exactly. The dtbo stub's
-`qcom,board-id` was pulled directly from `reference/dts/sm8250-oneplus-instantnoodle.dts` rather
-than copied from the Pro's port - it happens to match the Pro's value, which is flagged in that
-file as unconfirmed, not silently assumed correct.
+Draft pmaports packaging (based on the packaged `device-oneplus-instantnoodlep` port as a
+template) is checked in at `pmaports/` - `device-oneplus-instantnoodle/`,
+`linux-oneplus-instantnoodle/`, `firmware-oneplus-instantnoodle/`, and
+`alsa-ucm-conf-oneplus-instantnoodle/`. The bootimg flash offsets and super-partition path were
+cross-checked against the actual `by-name` partition dump for a real OnePlus 8 the user supplied
+earlier and match `instantnoodlep`'s values exactly. The dtbo stub's `qcom,board-id` was pulled
+directly from `reference/dts/sm8250-oneplus-instantnoodle.dts` rather than copied from the Pro's
+port - it happens to match the Pro's value, which is flagged in that file as unconfirmed, not
+silently assumed correct.
+
+### Update 2026-08-24 (same day, later): all four packages built through real abuild/pmbootstrap
+
+The draft above has since been run through the actual packaging pipeline, not just a plain
+cross-compile. Set up a full local test rig: shallow-cloned the real `pmaports.git` (120 MB),
+dropped the four draft packages into `device/testing/`, ran `pmbootstrap init` pointed at that
+local checkout - **it found `instantnoodle` as a valid codename and listed it alongside the
+packaged `instantnoodlep`/`kebab` devices**, with no "create new port" prompt, confirming the
+draft `deviceinfo`/`APKBUILD` files are structurally valid. Generated real checksums with
+`pmbootstrap checksum` (all `sha512sums=""` placeholders now filled in the checked-in files) and
+ran `pmbootstrap -y build` on all four packages.
+
+Two real packaging bugs surfaced and were fixed along the way:
+
+- `linux-oneplus-instantnoodle`'s first draft listed a fabricated
+  `gcc-aarch64-linux-gnu-cross-toolchain` makedepends that doesn't exist in Alpine/pmaports.
+  Switched to `LLVM=1` + `clang`/`lld`/`llvm`, matching the convention the packaged
+  `linux-postmarketos-qcom-sm8250` kernel actually uses - this is what ultimately built.
+- Passwordless sudo had to be configured for the build user in this WSL environment; without it,
+  `pmbootstrap`'s internal `sudo losetup`/mount calls hang indefinitely waiting for a password
+  that can never arrive non-interactively. Environment-specific, not a packaging issue, but worth
+  recording since it silently hung twice before the cause was found.
+
+All four packages built successfully:
+
+| Package | Result |
+|---|---|
+| `linux-oneplus-instantnoodle-6.16.7-r0.apk` | 27.6 MB, built via LLVM/clang cross toolchain inside the real pmOS aarch64 buildroot, ~18.5 min |
+| `device-oneplus-instantnoodle-0.1-r0.apk` | 3 KB (deviceinfo + dtbo.img) |
+| `firmware-oneplus-instantnoodle-{adsp,cdsp,gpu,slpi,venus,wifi}-1-r0.apk` | 6 subpackages, correctly split; `-gpu` (49 KB) is the zap-shader blob |
+| `alsa-ucm-conf-oneplus-instantnoodle-1-r0.apk` | 2.2 KB |
+
+This is meaningfully stronger evidence than the raw cross-compile in the paragraph above: it
+confirms the *packaging*, not just the *source*, is sound - dependency resolution, checksum
+verification, cross-toolchain selection, and firmware subpackage splitting all worked without
+manual intervention beyond the two fixes above. It still does not confirm the kernel boots on
+real hardware, and `pmbootstrap install` (assembling an actual bootable image from these
+packages) has not been attempted yet.
 
 ---
 

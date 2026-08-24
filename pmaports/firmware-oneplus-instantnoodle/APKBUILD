@@ -1,0 +1,85 @@
+# Reference: <https://postmarketos.org/devicepkg>
+# DRAFT - not yet built. Sourced from github.com/Xo666/linux-oneplus-instantnoodle,
+# the same author as the linux-oneplus-instantnoodle kernel package, whose
+# firmware-name properties (verified directly in reference/dts/) expect
+# "qcom/sm8250/OnePlus/<file>" - capital O, single .mbn files, no PIL
+# squashing needed (unlike the instantnoodlep firmware package this was
+# adapted from, which pulls split .mdt/.bXX segments and reassembles them
+# with pil-squasher for a different kernel's firmware-loading convention).
+#
+# LICENSING CAVEAT (see docs/verification-log.md section 1.4): these are
+# proprietary OnePlus/Qualcomm-signed blobs redistributed on a public GitHub
+# repo with no stated license for that content. Convenient, but the legal
+# status of redistribution is unresolved - same caveat applies here as in
+# the upstream repo.
+maintainer=""
+pkgname=firmware-oneplus-instantnoodle
+pkgver=1
+pkgrel=0
+pkgdesc="Firmware for OnePlus 8 (instantnoodle)"
+url="https://github.com/Xo666/linux-oneplus-instantnoodle"
+arch="aarch64"
+license="proprietary"
+options="!check !strip !archcheck !tracedeps pmb:cross-native"
+replaces="
+	linux-firmware-ath11k
+	linux-firmware-qca
+	linux-firmware-qcom
+"
+subpackages="
+	$pkgname-adsp:adsp
+	$pkgname-cdsp:cdsp
+	$pkgname-gpu:gpu
+	$pkgname-slpi:slpi
+	$pkgname-venus:venus
+	$pkgname-wifi:wifi
+"
+_commit="9e645da0ce76ccb7594d5b2da6fb43fe374b6897"
+source="https://github.com/Xo666/linux-oneplus-instantnoodle/archive/$_commit/linux-oneplus-instantnoodle-$_commit.tar.gz"
+builddir="$srcdir/linux-oneplus-instantnoodle-$_commit"
+_fwdir="$builddir/firmware-oneplus-instantnoodle/usr/lib/firmware"
+
+package() {
+	mkdir -p "$pkgdir"
+}
+
+# Path rename: upstream ships qcom/sm8250/OnePlus8/, but every DTS audited
+# in this repo declares firmware-name = "qcom/sm8250/OnePlus/<file>" - no
+# digit. See docs/verification-log.md section 1.4.
+adsp() {
+	install -Dm644 "$_fwdir/qcom/sm8250/OnePlus8/adsp.mbn" \
+		-t "$subpkgdir/lib/firmware/qcom/sm8250/OnePlus/"
+}
+
+cdsp() {
+	install -Dm644 "$_fwdir/qcom/sm8250/OnePlus8/cdsp.mbn" \
+		-t "$subpkgdir/lib/firmware/qcom/sm8250/OnePlus/"
+}
+
+gpu() {
+	install -Dm644 "$_fwdir/qcom/sm8250/OnePlus8/a650_zap.mbn" \
+		-t "$subpkgdir/lib/firmware/qcom/sm8250/OnePlus/"
+	install -Dm644 "$_fwdir/qcom/a650_gmu.bin" -t "$subpkgdir/lib/firmware/qcom/"
+	install -Dm644 "$_fwdir/qcom/a650_sqe.fw" -t "$subpkgdir/lib/firmware/qcom/"
+}
+
+slpi() {
+	install -Dm644 "$_fwdir/qcom/sm8250/OnePlus8/slpi.mbn" \
+		-t "$subpkgdir/lib/firmware/qcom/sm8250/OnePlus/"
+}
+
+venus() {
+	install -Dm644 "$_fwdir/qcom/sm8250/OnePlus8/venus.mbn" \
+		-t "$subpkgdir/lib/firmware/qcom/sm8250/OnePlus/"
+}
+
+wifi() {
+	# ath11k/QCA6390/hw2.0/{amss.bin,board-2.bin,m3.bin,Notice.txt} - copy the
+	# whole nested tree as-is, no path rewriting needed here.
+	mkdir -p "$subpkgdir/lib/firmware"
+	cp -r "$_fwdir/ath11k" "$subpkgdir/lib/firmware/"
+}
+
+sha512sums="
+8616aedad38a23f38ddb1ead7d56e252f66707930f93ea93563f4eaaba02a52f1d798a30d2c4ca29ed375d71322e5b6536c1cc028bf4083d436dace1f664fc68  linux-oneplus-instantnoodle-9e645da0ce76ccb7594d5b2da6fb43fe374b6897.tar.gz
+"

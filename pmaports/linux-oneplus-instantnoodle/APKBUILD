@@ -1,10 +1,16 @@
 # Reference: <https://postmarketos.org/vendorkernel>
 # DRAFT - not yet built through abuild/pmbootstrap. A plain cross-compile of
 # this exact source+defconfig combination (op8_defconfig, GCC 13 aarch64
-# cross toolchain, Ubuntu 24.04 host) was verified to succeed outside the
-# packaging system on 2026-08-24; see docs/verification-log.md. This
-# APKBUILD wraps that into the pmaports/abuild convention but has not itself
-# been run through abuild yet.
+# cross toolchain via gcc-aarch64-linux-gnu, Ubuntu 24.04 host) was verified
+# to succeed outside the packaging system on 2026-08-24; see
+# docs/verification-log.md. This APKBUILD wraps that into the pmaports/abuild
+# convention, but uses LLVM/clang (ARCH=arm64 LLVM=1) instead of a GCC cross
+# toolchain package, matching the makedepends/build() convention of the
+# packaged device/community/linux-postmarketos-qcom-sm8250 kernel - there is
+# no "gcc-aarch64-linux-gnu-cross-toolchain" package in Alpine/pmaports (a
+# first attempt using that name failed with "dependency not found"). Not
+# re-verified with LLVM specifically yet, only that the source is buildable
+# in general.
 maintainer=""
 _flavor="oneplus-instantnoodle"
 pkgname=linux-$_flavor
@@ -21,9 +27,11 @@ makedepends="
 	bash
 	bc
 	bison
+	clang
 	findutils
 	flex
-	gcc-aarch64-linux-gnu-cross-toolchain
+	lld
+	llvm
 	openssl-dev
 	perl
 	postmarketos-installkernel
@@ -43,12 +51,12 @@ builddir="$srcdir/mainline-instantnoodle-$pkgver"
 
 prepare() {
 	default_prepare
-	make ARCH="$_carch" CROSS_COMPILE="aarch64-linux-gnu-" "$_config"
+	make ARCH="$_carch" LLVM=1 "$_config"
 }
 
 build() {
 	unset LDFLAGS
-	make ARCH="$_carch" CROSS_COMPILE="aarch64-linux-gnu-" \
+	make ARCH="$_carch" LLVM=1 \
 		KBUILD_BUILD_VERSION="$pkgrel-$_flavor" \
 		Image.gz dtbs modules
 }
@@ -56,7 +64,7 @@ build() {
 package() {
 	mkdir -p "$pkgdir"/boot
 
-	make ARCH="$_carch" CROSS_COMPILE="aarch64-linux-gnu-" \
+	make ARCH="$_carch" LLVM=1 \
 		zinstall modules_install dtbs_install \
 		INSTALL_PATH="$pkgdir"/boot/ \
 		INSTALL_MOD_PATH="$pkgdir" \
@@ -64,4 +72,6 @@ package() {
 		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs
 }
 
-sha512sums=""
+sha512sums="
+11390f07286a48176ab46d20cd3ed7e389af8605da3b7f9c0c70148f54c2e41194f1205a92fd039b906eade8804360d6b98a77c402a1459098287fa5581e7d89  linux-oneplus-instantnoodle-6.16.7.tar.gz
+"

@@ -1,0 +1,30 @@
+# Reference: <https://postmarketos.org/devicepkg>
+# DRAFT - not yet built. Sourced from github.com/Xo666/linux-oneplus-instantnoodle.
+# The HiFi.conf mixer paths (TERT_MI2S_RX, WCD9380 RX/TX) reference the
+# codec confirmed in reference/dts/sm8250-oneplus-instantnoodle.dts
+# (qcom,wcd9380-codec) - consistent with the rest of this document's audio
+# findings, not just copy-pasted from a similarly-named device.
+maintainer=""
+pkgname=alsa-ucm-conf-oneplus-instantnoodle
+pkgver=1
+pkgrel=0
+pkgdesc="ALSA UCM configuration for OnePlus 8 (instantnoodle)"
+url="https://github.com/Xo666/linux-oneplus-instantnoodle"
+arch="aarch64"
+license="proprietary"
+provides="alsa-ucm-conf"
+provider_priority=1
+options="!check"
+_commit="9e645da0ce76ccb7594d5b2da6fb43fe374b6897"
+source="$pkgname-$_commit.tar.gz::https://github.com/Xo666/linux-oneplus-instantnoodle/archive/$_commit.tar.gz"
+builddir="$srcdir/linux-oneplus-instantnoodle-$_commit"
+
+package() {
+	mkdir -p "$pkgdir"/usr/share/alsa/ucm2
+	cp -r "$builddir/alsa-oneplus-instantnoodle/usr/share/alsa/ucm2/OnePlus" \
+		"$pkgdir"/usr/share/alsa/ucm2/
+}
+
+sha512sums="
+8616aedad38a23f38ddb1ead7d56e252f66707930f93ea93563f4eaaba02a52f1d798a30d2c4ca29ed375d71322e5b6536c1cc028bf4083d436dace1f664fc68  alsa-ucm-conf-oneplus-instantnoodle-9e645da0ce76ccb7594d5b2da6fb43fe374b6897.tar.gz
+"
