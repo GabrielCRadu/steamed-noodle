@@ -373,6 +373,40 @@ unmodified tree (§1.4), and that fork-divergence problem - not charging, not St
 is now the most fundamental open risk. This is a correction to the *previous* correction, not
 a reversal of it: 5 W charging is still real, it's just real on a tree without graphics.
 
+## 7.5. Kernel build - CONFIRMED (no hardware needed for this part)
+
+Without a phone available, the highest-value hardware-independent check is: does the Xo666
+kernel source actually compile? **Yes.** Verified 2026-08-24:
+
+- Shallow-cloned `github.com/Xo666/mainline-instantnoodle`, branch `6.16.7` (`git clone --depth 1`).
+- Host: Ubuntu 24.04 LTS under WSL2 (kernel `5.15.167.4-microsoft-standard-WSL2`), cross-compiling
+  with `aarch64-linux-gnu-gcc 13.3.0` (Ubuntu package `gcc-aarch64-linux-gnu`).
+- `make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- op8_defconfig` - the OnePlus-8-specific
+  defconfig shipped in this fork's `arch/arm64/configs/` - configured cleanly.
+- `make -j16 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- Image.gz dtbs` completed in 5m30s
+  wall-clock (69m of CPU time across 16 cores), exit code 0.
+- Produced artifacts, confirmed on disk: `arch/arm64/boot/Image.gz` (15.2 MB) and
+  `arch/arm64/boot/dts/qcom/sm8250-oneplus-instantnoodle.dtb` (134,896 bytes, compiled with no
+  `dtc` errors).
+
+This is a real build, not a projection - it's the strongest signal available without hardware
+that the reference DTS and kernel source in this repo are internally consistent and buildable.
+It does **not** confirm the kernel boots, that the zap-shader firmware actually initializes the
+GPU, or any of the runtime claims elsewhere in this log - only that the source compiles clean
+with this defconfig and toolchain. Module build (`modules`) and a full `dtbs_install` pass were
+not run in this check; only the two artifacts actually needed to test-boot the device were built.
+
+Draft pmaports packaging (not yet run through `abuild`/`pmbootstrap`, based on the packaged
+`device-oneplus-instantnoodlep` port as a template) is checked in at `pmaports/` -
+`device-oneplus-instantnoodle/` and `linux-oneplus-instantnoodle/`. The bootimg flash offsets and
+super-partition path were cross-checked against the actual `by-name` partition dump for a real
+OnePlus 8 the user supplied earlier and match `instantnoodlep`'s values exactly. The dtbo stub's
+`qcom,board-id` was pulled directly from `reference/dts/sm8250-oneplus-instantnoodle.dts` rather
+than copied from the Pro's port - it happens to match the Pro's value, which is flagged in that
+file as unconfirmed, not silently assumed correct.
+
+---
+
 ## 8. Summary
 
 **Alive, on the Xo666 tree specifically.** The device boots mainline with working 3D on at

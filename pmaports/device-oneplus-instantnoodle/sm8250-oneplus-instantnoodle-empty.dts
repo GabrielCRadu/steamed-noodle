@@ -1,0 +1,24 @@
+/dts-v1/;
+
+/ {
+	model = "Qualcomm Technologies, Inc. kona v2.1 SoC 19805";
+	compatible = "qcom,kona";
+	chassis-type = "handset";
+
+	/*
+	 * msm-id/board-id taken directly from
+	 * reference/dts/sm8250-oneplus-instantnoodle.dts (Xo666 fork), lines 46-47:
+	 *   qcom,msm-id = <0x164 0x10000>, <0x164 0x20001>;
+	 *   qcom,board-id = <0x08 0x00>, <0x00 0x00>;
+	 * 0x164 == 356 decimal, matching instantnoodlep's stub (SM8250/"kona").
+	 *
+	 * NOTE: board-id "8 0" is IDENTICAL to instantnoodlep's (OnePlus 8 Pro)
+	 * stub value. Not yet confirmed whether that's correct (the ABL
+	 * bootloader may not need board-id to distinguish 8 vs 8 Pro, since
+	 * they likely enumerate as separate fastboot products already), or
+	 * whether Xo666's DTS simply carried the Pro's value over unchanged.
+	 * Flagged for verification against real hardware, not fabricated.
+	 */
+	qcom,msm-id = <0x164 0x10000>, <0x164 0x20001>;
+	qcom,board-id = <0x08 0x00>, <0x00 0x00>;
+};

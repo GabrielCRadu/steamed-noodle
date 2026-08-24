@@ -1,0 +1,42 @@
+# Reference: <https://postmarketos.org/devicepkg>
+# DRAFT - adapted from device-oneplus-instantnoodlep (pmaports, packaged),
+# not yet built or tested. See docs/verification-log.md for the sourcing
+# and cross-checks behind every value here.
+maintainer=""
+pkgname=device-oneplus-instantnoodle
+pkgdesc="OnePlus 8"
+pkgver=0.1
+pkgrel=0
+url="https://postmarketos.org"
+license="MIT"
+arch="aarch64"
+options="!check !archcheck"
+depends="
+	firmware-oneplus-instantnoodle
+	linux-oneplus-instantnoodle
+	mkbootimg
+	postmarketos-base
+"
+makedepends="
+	devicepkg-dev
+	dtc
+"
+source="
+	deviceinfo
+	kernel-cmdline.conf
+	sm8250-oneplus-instantnoodle-empty.dts
+"
+
+build() {
+	devicepkg_build $startdir $pkgname
+
+	dtc -O dtb -o "$srcdir/dtbo.img" -I dts "$srcdir/sm8250-oneplus-instantnoodle-empty.dts"
+}
+
+package() {
+	devicepkg_package $startdir $pkgname
+
+	install -Dm644 "$srcdir/dtbo.img" "$pkgdir/boot/dtbo.img"
+}
+
+sha512sums=""

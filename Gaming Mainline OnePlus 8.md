@@ -284,6 +284,15 @@ Desfășurarea stivei de operare necesită pregătirea partițiilor fizice UFS, 
 
 Pachetele `fex`, `proton`, `steam` și `box64` **nu există deloc în pmaports** - toată stiva de gaming din userspace e muncă neambalată, de făcut manual sau prin scripturi proprii.
 
+> **Verificat fără telefon (2026-08-24):** sursa kernelului Xo666 chiar compilează. Cross-compilare
+> directă (fără pmbootstrap) cu `aarch64-linux-gnu-gcc 13.3.0` pe Ubuntu 24.04/WSL2, folosind
+> `op8_defconfig` (defconfig-ul specific OnePlus 8 din acest fork), a produs `Image.gz` (15.2 MB)
+> și `sm8250-oneplus-instantnoodle.dtb` compilat fără erori, în 5m30s. Asta confirmă că sursa e
+> internă consistentă și compilabilă - nu confirmă că pornește pe telefon, nici că shader-ul GPU
+> chiar se încarcă. Detalii complete și pachete draft pmaports (`device-oneplus-instantnoodle`,
+> `linux-oneplus-instantnoodle`, netestate prin `abuild`) în `docs/verification-log.md` §7.5 și
+> directorul `pmaports/`.
+
 ### **Estimări de Performanță și Benchmarks Așteptate**
 
 > **Tratați acest tabel ca plafon superior, nu ca măsurătoare.** Cifrele de mai jos sunt proiecții, nu

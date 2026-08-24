@@ -1,0 +1,67 @@
+# Reference: <https://postmarketos.org/vendorkernel>
+# DRAFT - not yet built through abuild/pmbootstrap. A plain cross-compile of
+# this exact source+defconfig combination (op8_defconfig, GCC 13 aarch64
+# cross toolchain, Ubuntu 24.04 host) was verified to succeed outside the
+# packaging system on 2026-08-24; see docs/verification-log.md. This
+# APKBUILD wraps that into the pmaports/abuild convention but has not itself
+# been run through abuild yet.
+maintainer=""
+_flavor="oneplus-instantnoodle"
+pkgname=linux-$_flavor
+pkgver=6.16.7
+pkgrel=0
+pkgdesc="OnePlus 8 (instantnoodle) mainline kernel, Xo666 fork"
+arch="aarch64"
+_carch="arm64"
+_config="op8_defconfig"
+url="https://github.com/Xo666/mainline-instantnoodle"
+license="GPL-2.0-only"
+options="!strip !check !tracedeps pmb:cross-native"
+makedepends="
+	bash
+	bc
+	bison
+	findutils
+	flex
+	gcc-aarch64-linux-gnu-cross-toolchain
+	openssl-dev
+	perl
+	postmarketos-installkernel
+	python3
+"
+
+# Source: Xo666/mainline-instantnoodle, branch 6.16.7 (see verification-log.md
+# section 1.4 for why this fork and not ObiKeahloa's or WuerfelDev's - this is
+# the only one of the three with a complete, working zap-shader wiring for
+# the GPU, which is a hard prerequisite for the whole gaming-stack project).
+# NOTE: this branch has no pm8150b_charger node at all (see verification-log.md
+# section 4) - charging will not work on an unmodified build of this kernel.
+source="
+	$pkgname-$pkgver.tar.gz::https://github.com/Xo666/mainline-instantnoodle/archive/refs/heads/$pkgver.tar.gz
+"
+builddir="$srcdir/mainline-instantnoodle-$pkgver"
+
+prepare() {
+	default_prepare
+	make ARCH="$_carch" CROSS_COMPILE="aarch64-linux-gnu-" "$_config"
+}
+
+build() {
+	unset LDFLAGS
+	make ARCH="$_carch" CROSS_COMPILE="aarch64-linux-gnu-" \
+		KBUILD_BUILD_VERSION="$pkgrel-$_flavor" \
+		Image.gz dtbs modules
+}
+
+package() {
+	mkdir -p "$pkgdir"/boot
+
+	make ARCH="$_carch" CROSS_COMPILE="aarch64-linux-gnu-" \
+		zinstall modules_install dtbs_install \
+		INSTALL_PATH="$pkgdir"/boot/ \
+		INSTALL_MOD_PATH="$pkgdir" \
+		INSTALL_MOD_STRIP=1 \
+		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs
+}
+
+sha512sums=""
