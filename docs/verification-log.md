@@ -440,9 +440,35 @@ All four packages built successfully:
 This is meaningfully stronger evidence than the raw cross-compile in the paragraph above: it
 confirms the *packaging*, not just the *source*, is sound - dependency resolution, checksum
 verification, cross-toolchain selection, and firmware subpackage splitting all worked without
-manual intervention beyond the two fixes above. It still does not confirm the kernel boots on
-real hardware, and `pmbootstrap install` (assembling an actual bootable image from these
-packages) has not been attempted yet.
+manual intervention beyond the two fixes above.
+
+### Update 2026-08-24 (same day, later still): `pmbootstrap install --split` succeeded
+
+Ran the full install flow against the four packages above. First attempt failed at `mkinitfs`
+with `only one kernel release/flavor is supported, found: []` - our `linux-oneplus-instantnoodle`
+package installed `boot/vmlinuz` and `lib/modules/6.16.7/` correctly, but never wrote
+`/usr/share/kernel/<flavor>/kernel.release`, which is what `mkinitfs` actually scans for to
+discover installed kernels. Found by diffing our `package()` step against the working
+`device/community/linux-postmarketos-qcom-sm8250` APKBUILD, which has this exact line:
+
+```
+install -D "$builddir"/include/config/kernel.release \
+    "$pkgdir"/usr/share/kernel/$_flavor/kernel.release
+```
+
+Added it (plus the `rm -f .../build .../source` cleanup the reference package also does),
+bumped `pkgrel`, rebuilt (cache-warm, ~2 min this time), and re-ran install. **It completed
+cleanly**: produced `oneplus-instantnoodle-boot.img` (512 MB) and `oneplus-instantnoodle-root.img`
+(829 MB), with `pmbootstrap` printing real flash commands (`pmbootstrap flasher flash_dtbo`,
+`flash_kernel`, or `pmbootstrap export` to flash outside pmbootstrap).
+
+**This is the practical ceiling of what can be verified without the phone in hand.** The images
+exist and are internally consistent (rootfs copied, fstab generated, initramfs built against our
+actual kernel), but nothing here proves they boot on real SM8250 silicon, that AVB/vbmeta
+verification won't block them, or that the flash offsets in `deviceinfo` are exactly right. A
+separate audit is in progress specifically to catch flashing/brick risks not yet covered by
+kernel-compiles-successfully-style checks (AVB, dynamic partitions, EDL recovery currency,
+device-specific bootloader unlock issues) before any real hardware is touched.
 
 ---
 
