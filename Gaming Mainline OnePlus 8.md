@@ -1,43 +1,75 @@
 # **Arhitectura și Implementarea unui Stack de Gaming Mainline Linux pe OnePlus 8 (SM8250)**
 
-Transformarea unui smartphone comercial bazat pe platforma Qualcomm Snapdragon 865 (SM8250, nume de cod *kona* / *instantnoodle*) într-o consolă portabilă de gaming sub un sistem de operare Mainline Linux reprezintă o lucrare de inginerie de sistem de o complexitate remarcabilă1. Această tranziție implică decuplarea completă a dispozitivului de stiva proprietară Android - compusă din runtime-ul ART, serverul SurfaceFlinger, subsistemul IPC Binder, HAL-urile închise și nucleele downstream de tip CAF 4.19 - și reconstruirea mediului de execuție pe baza unui kernel Linux upstream nemodificat4.  
-Configurația hardware a terminalului OnePlus 8, care include 8 GB sau 12 GB memorie RAM LPDDR5, stocare de mare viteză UFS 3.0, un panou Fluid AMOLED de 1080x2400 pixeli la 90 Hz și unitatea de procesare grafică Adreno 650, furnizează o bază computațională capabilă să susțină sarcini grafice complexe1. Interfațarea acestui hardware cu un periferic hibrid precum GameSir X3 Pro, care asociază transportul de date USB-C Human Interface Device (HID) cu un modul activ de răcire termoelectrică Peltier, permite eliminarea plafonărilor termice severe și stabilizarea frecvențelor maxime de calcul7.  
-La nivel de software, arhitectura propusă se sprijină pe un micro-compositor Wayland dedicat (Gamescope), driverul grafic complet open-source Mesa Turnip (Vulkan 1.3) și un lanț de execuție hibrid format din Proton 11 ARM64 și emulatorul usermode FEX-Emu, permițând rularea transparentă a titlurilor Windows x86/x86\_64 pe arhitectura AArch648.
+> **Notă de verificare:** acest document a fost verificat pe 2026-08-24 față de sursele reale
+> (pmaports, kernelul mainline, fork-urile comunității pentru SM8250, wiki-ul postmarketOS).
+> Corecturile sunt marcate inline. Detaliile complete, cu surse, sunt în
+> [`docs/verification-log.md`](docs/verification-log.md). Cea mai importantă corecție:
+> "suport mainline" pentru acest telefon nu înseamnă kernel.org - înseamnă un fork întreținut
+> de un singur contributor, care nu e nici măcar împachetat oficial în postmarketOS.
 
-## **1\. Starea Kernelului Mainline & Device Tree pentru SM8250**
+Transformarea unui smartphone comercial bazat pe platforma Qualcomm Snapdragon 865 (SM8250, nume de cod *kona*; codul specific de dispozitiv pentru OnePlus 8 este *instantnoodle*) într-o consolă portabilă de gaming sub un sistem de operare Linux reprezintă o lucrare de inginerie de sistem de o complexitate remarcabilă. Această tranziție implică decuplarea completă a dispozitivului de stiva proprietară Android - compusă din runtime-ul ART, serverul SurfaceFlinger, subsistemul IPC Binder, HAL-urile închise și nucleul downstream de tip CAF 4.19 - și reconstruirea mediului de execuție pe baza unui kernel Linux 6.x, pornind de la un fork comunitar dedicat SM8250 (nu de la kernelul upstream nemodificat; vezi Secțiunea 1).
+Configurația hardware a terminalului OnePlus 8 include 8 GB sau 12 GB memorie RAM LPDDR5, stocare UFS 2.0 (nu 3.0, vezi tabelul de mai jos), un panou Fluid AMOLED de 1080x2400 pixeli la 90 Hz și unitatea de procesare grafică Adreno 650, furnizând o bază computațională capabilă să susțină sarcini grafice complexe. Interfațarea acestui hardware cu un periferic hibrid precum GameSir X3 Pro, care asociază transportul de date USB-C Human Interface Device (HID) cu un modul activ de răcire termoelectrică Peltier, permite eliminarea plafonărilor termice severe și stabilizarea frecvențelor maxime de calcul - însă alimentarea telefonului însuși în timpul sesiunii rămâne un risc nerezolvat (Secțiunea 4).
+La nivel de software, arhitectura propusă se sprijină pe driverul grafic complet open-source Mesa Turnip (Vulkan 1.3) și un lanț de execuție hibrid format din Proton 11 ARM64 și emulatorul usermode FEX-Emu, permițând rularea titlurilor Windows x86/x86_64 pe arhitectura AArch64. Compositorul folosit pentru sesiunea de gaming nu poate fi "Gamescope" ca opțiune de instalare în pmbootstrap - acel pachet nu există (Secțiunea 5); trebuie compilat separat.
 
-Suportul upstream pentru platforma Qualcomm SM8250 a atins un nivel avansat de convergență în ramurile recente ale kernelului Linux (versiunile 6.6-6.17+), fiind dezvoltat activ în cadrul ecosistemului *Linux on Mobile* și integrat în distribuții specializate precum postmarketOS2. Cu toate acestea, punerea în funcțiune pe un dispozitiv specific de tip *oneplus-instantnoodle* impune rezolvarea unor limitări de subsistem și ajustarea precisă a arborilor de dispozitive (Device Tree Source \- DTS)12.
+## **1\. Starea Suportului de Kernel pentru SM8250 pe instantnoodle**
 
-| Subsistem Hardware | Stare Suport Upstream | Modul Kernel / Arhitectură Driver | Observații Tehnice & Cerințe DTS |
+Suportul pentru platforma Qualcomm SM8250 există în kernelul Linux mainline (versiunile 6.6-6.17+) doar pentru o mână de plăci de referință și telefoane Xiaomi/Sony/Samsung - lista completă din `arch/arm64/boot/dts/qcom` la data verificării era `hdk`, `mtp`, `samsung-r8q`, `samsung-x1q`, `sony-xperia-edo-pdx203`, `sony-xperia-edo-pdx206`, `xiaomi-elish-{boe,csot}`, `xiaomi-pipa`. **Niciun device tree OnePlus SM8250 nu există în kernel.org**, nici pentru OnePlus 8, nici pentru 8 Pro, nici pentru 8T.
+
+Suportul real pentru `instantnoodle` (codul OnePlus 8 standard) trăiește în două fork-uri neoficiale, în afara pmaports și a kernelului postmarketOS oficial:
+
+- [`github.com/Xo666/mainline-instantnoodle`](https://github.com/Xo666/mainline-instantnoodle) (branch `6.16.7`), care conține `sm8250-oneplus-instantnoodle.dts` - acesta e device tree-ul verificat și folosit ca referință în acest document (vezi `reference/dts/`).
+- [`gitlab.com/ObiKeahloa/linux`](https://gitlab.com/ObiKeahloa/linux/-/tree/sm8250/v6.13-instantnoodle) (branch `sm8250/v6.13-instantnoodle`).
+
+Wiki-ul postmarketOS confirmă că dispozitivul boot-ează (`booting = yes`) cu 3D funcțional (`status_3d = Y`), dar îl marchează `packaged = no` și `category = testing` - adică **nu există un pachet `device-oneplus-instantnoodle` în pmaports**. Pachetele OnePlus care chiar există sunt `device-oneplus-enchilada` (6), `device-oneplus-fajita` (6T), `device-oneplus-bacon` (One), `device-oneplus-billie2` (Nord N100), `device-oneplus-guacamole` (7 Pro), `device-oneplus-instantnoodlep` (**8 Pro**) și `device-oneplus-kebab` (**8T**). OnePlus 8 standard nu e printre ele. Fluxul de instalare din Secțiunea 5 trebuie tratat ca instalare dintr-un fork, nu ca `pmbootstrap init` standard.
+
+| Subsistem Hardware | Stare Reală (verificată pe DTS Xo666) | Modul Kernel / Arhitectură Driver | Observații Tehnice & Cerințe DTS |
 | :---- | :---- | :---- | :---- |
-| **Display (DSI/KMS)** | Funcțional (cu patch-uri) | msm\_drm / panel-dsi-generic | Necesită noduri DTS cu secvențe DCS și sincronizare DSC4. |
-| **Touchscreen** | Funcțional Complet | goodix\_core / synaptics\_dsx | Interfațat prin magistrala I²C/SPI; noduri evdev standard14. |
-| **Stocare UFS** | Funcțional Complet | ufs\_qcom | Suport complet UFS 3.0 pe magistrala PCIe/UniPro (/dev/sda ... /dev/sdf). |
-| **USB-C OTG / USB 3.0** | Funcțional Parțial | qcom-pmic-typec / dwc3-qcom | Quirk hardware de multiplexare a liniilor de mare viteză USB 3.014. |
-| **USB-PD (Power Delivery)** | Funcțional Limitat | pm8150b-charger | Necesită gestionare strictă a mașinii de stări pentru prevenirea blocajelor VBUS12. |
-| **Audio ALSA/PipeWire** | Funcțional Condiționat | qcom-lpass / snd-soc-wcd938x | Depinde de firmware-ul proprietar Hexagon DSP și profile ALSA UCM214. |
+| **Display (DSI/KMS)** | Funcțional | msm_drm, panel `samsung,amb655uv01` | O singură bandă MIPI-DSI (`mdss_dsi0`), nu două. 1080x2400 la 60/90 Hz confirmat. |
+| **Touchscreen** | Funcțional | `samsung,s6sy761` la adresa 0x48 pe i2c13 | Nu e goodix și nu e synaptics_dsx - e un controller Samsung dedicat. |
+| **Stocare UFS** | Funcțional | ufs_qcom | DTS și wiki declară `jedec,ufs-2.0`, nu UFS 3.0. |
+| **USB-C OTG / USB 3.0** | Funcțional, cu quirk | qcom-pmic-typec / dwc3-qcom | Mux `fcs,fsa4480` prezent pe SBU; comportamentul de orientare e neverificat pe hardware. |
+| **USB-PD (Power Delivery)** | Sink PD declarat, **încărcare neconfirmată** | `pm8150b_typec` | **Niciun nod de charger nu există în acest DTS.** Sink advertisement nu înseamnă driver de încărcare. Vezi Secțiunea 4. |
+| **Audio ALSA/PipeWire** | Funcțional Condiționat | qcom-lpass / `qcom,wcd9380-codec` | Codec e WCD9380, nu WCD9385; plus 2x amplificatoare de difuzor `nxp,tfa9874` pe i2c15, absente din doc inițial. |
+
+Hardware suplimentar prezent în DTS și absent din documentul inițial: **DisplayPort alt-mode** activ pe USB-C (`&mdss_dp`), regulator `pm8150b_vbus` care poate alimenta accesorii USB (OTG sursă, 500 mA-3 A), baterie `simple-battery` de 16.37 Wh / 4270 mAh / 3.4-4.435 V, și fuel gauge `ti,bq27411` pentru raportare exactă a încărcării. Camera frontală (`sony,imx471`) e prezentă; **camera spate (imx586) lipsește complet din DTS**.
+
+Cunoscute ca nefuncționale, conform wiki-ului: modem (`sdx55m`), senzori (nodul `slpi` se încarcă dar nu e configurat), haptice (`awinic,aw8697`), camera spate. Pentru un handheld dedicat, niciuna dintre acestea nu contează, cu excepția hapticelor - o pierdere de confort, nu una funcțională.
 
 ### **Subsistemul de Afișare DRM/KMS și Panoul MIPI-DSI**
 
-Afișajul AMOLED al dispozitivului OnePlus 8 este conectat prin intermediul a două benzi MIPI-DSI la unitatea DPU (Display Processing Unit) din cadrul nucleului DRM MSM. În timp ce infrastructura generică DRM/KMS gestionează operațiunile atomice de comutare a modului grafic, panoul fizic impune declararea în Device Tree a secvențelor exacte de inițializare DCS (Display Command Set), extrase din ramurile CAF sau firmware-ul OxygenOS4.  
-Fără aceste tabele de comenzi, regulatorii de tensiune LDO asociați panoului nu pot stabili timpii de sincronizare corecți la trecerea dinspre bootloader-ul ABL către kernel. În plus, configurarea modului de 90 Hz necesită setarea explicită a frecvențelor ceasului de bit DSI și a parametrilor Display Stream Compression (DSC), ocolind limitările de lățime de bandă ale interfeței fizice.
+Afișajul AMOLED al dispozitivului OnePlus 8 este conectat printr-o **singură** bandă MIPI-DSI (`mdss_dsi0`) la unitatea DPU (Display Processing Unit) din cadrul nucleului DRM MSM - documentul original vorbea greșit de două benzi. Panoul declarat în DTS este `samsung,amb655uv01`. În timp ce infrastructura generică DRM/KMS gestionează operațiunile atomice de comutare a modului grafic, panoul fizic impune declararea în Device Tree a secvențelor exacte de inițializare DCS (Display Command Set), extrase din ramurile CAF sau firmware-ul OxygenOS.
+Fără aceste tabele de comenzi, regulatorii de tensiune LDO asociați panoului nu pot stabili timpii de sincronizare corecți la trecerea dinspre bootloader-ul ABL către kernel. În plus, configurarea modului de 90 Hz necesită setarea explicită a frecvențelor ceasului de bit DSI și a parametrilor Display Stream Compression (DSC), ocolind limitările de lățime de bandă ale interfeței fizice. Rezoluția 1080x2400 la 60/90 Hz e confirmată atât în DTS, cât și pe wiki.
 
 ### **Touchscreen și Stocare UFS**
 
-Digitizorul tactil beneficiază de integrare completă prin driverele standard de kernel upstream goodix sau synaptics, comunicând direct prin magistrala I²C a SoC-ului și expunând fluxurile de coordonate direct către nodurile /dev/input/eventX14.  
-Subsistemul de stocare UFS 3.0, gestionat prin driverul ufs\_qcom, funcționează la viteze native, permițând citiri și scrieri paralele fără penalizări de performanță prin cele 6 unități logice (LUN 0-5) mapate ca dispozitive de bloc SCSI standard.
+Digitizorul tactil nu folosește driverele goodix sau synaptics presupuse inițial. Device tree-ul verificat declară un controller **`samsung,s6sy761`** pe magistrala I²C13, la adresa 0x48, expunând fluxurile de coordonate prin nodurile /dev/input/eventX standard.
+Subsistemul de stocare este gestionat prin driverul ufs\_qcom, dar DTS-ul și wiki-ul îl declară `jedec,ufs-2.0`, nu UFS 3.0 cum spune fișa tehnică de marketing a telefonului. Diferența contează pentru estimările de I/O (instalare de jocuri, load times), care trebuie coborâte proporțional.
 
 ### **Limitări Hardware Critice pe USB-C și Power Delivery**
 
-Managementul portului USB Type-C pe OnePlus 8 prezintă două vulnerabilități structurale în contextul andocării controllerului de joc14:
+Managementul portului USB Type-C pe OnePlus 8 prezintă riscuri structurale în contextul andocării controllerului de joc:
 
-> 1. Quirk-ul de multiplexare SuperSpeed: Din cauza absenței unui cip extern autonom de comutare a orientării magistralei pe placa de bază, controlerul DWC3 depinde de logica de detecție din PMIC14. Liniile USB 3.0 (5 Gbps) se activează exclusiv dacă orientarea raportată în /sys/class/typec/port0/orientation indică starea normală (*normal*)14. În cazul inserării inverse (*reverse*), subsistemul cade în modul de rezervă USB 2.0 (480 Mbps)14. Deși lățimea de bandă USB 2.0 este suficientă pentru perifericele HID, modul inversat limitează drastic lățimea de bandă dacă utilizatorul conectează simultan stocare externă prin portul controllerului14.  
-> 2. Instabilitatea mașinii de stări USB-PD: În scenarii de alimentare prin passthrough, când încărcătorul PD este atașat la GameSir X3 Pro, driverul pm8150b-charger poate eșua în negocierea profilelor de tensiune ridicată (9V/12V) dacă trecerea din modul de consumator (*sink*) în cel de sursă (*source*) are loc în timpul transferului intens de date12. Soluționarea acestei instabilități necesită patch-uri DTS care să fixeze profilul negociat la 5V/3A sau descărcarea completă a capacităților înainte de reatașare14.
+> 1. Quirk-ul de multiplexare SuperSpeed: pe placă există un mux dedicat `fcs,fsa4480` pentru liniile SBU, prezent în DTS. Comportamentul lui exact la orientare inversă a conectorului nu a fost testat pe hardware real (marcat **OPEN** în log-ul de verificare) - tratați presupunerea de mai jos ca ipoteză, nu ca fapt confirmat: liniile USB 3.0 (5 Gbps) s-ar activa exclusiv dacă orientarea raportată în /sys/class/typec/port0/orientation indică starea normală (*normal*), iar la inserare inversă subsistemul ar cădea în USB 2.0 (480 Mbps). Lățimea de bandă USB 2.0 e oricum suficientă pentru HID.
+> 2. **Nu există niciun nod de charger în acest device tree.** `pm8150b_typec` declară doar PDO-uri de sink (5V/3A fix, plus 5-12V variabil) - adică telefonul poate *cere* putere prin PD, dar afirmarea unui profil de sink nu e totuna cu a avea un driver care încarcă efectiv bateria. Presupunerea documentului original, că `pm8150b-charger` gestionează încărcarea și că problema e o "mașină de stări instabilă", nu poate fi confirmată din DTS - vezi analiza completă în Secțiunea 4.
 
 ### **Arhitectura Audio: DSP Hexagon, ALSA și PipeWire**
 
-Rutarea fluxurilor audio digitale către amplificatoarele interne și codecul Qualcomm WCD9385 se bazează pe subsistemul LPASS (Low Power Audio Subsystem) și pe procesorul de semnal digital Hexagon (ADSP)14. Funcționarea stabilă a stivei audio impune plasarea imaginilor de firmware proprietare extrase (adsp.mbn, cdsp.mbn) în directorul de sistem /lib/firmware/qcom/sm8250/16.  
-La nivelul spațiului utilizator, este obligatorie definirea profilelor ALSA UCM2 (Use Case Manager), care descriu căile corecte ale mixerului hardware. Fără aceste fișiere UCM2, serverul de sunet PipeWire nu poate deschide rutele către difuzoarele stereo sau interfața jack/USB-C, generând blocaje în fluxul audio al jocurilor rulate sub Proton14.
+Codecul audio declarat în DTS este **`qcom,wcd9380-codec`**, nu WCD9385 cum spunea documentul original, plus **două amplificatoare de difuzor `nxp,tfa9874`** pe i2c15 - componentă absentă complet din varianta inițială a documentului. Rutarea fluxurilor audio digitale se bazează pe subsistemul LPASS (Low Power Audio Subsystem) și pe procesorul de semnal digital Hexagon (ADSP). Funcționarea stabilă a stivei audio impune plasarea imaginilor de firmware proprietare extrase (`adsp.mbn`, `cdsp.mbn`) în directorul de sistem **`/lib/firmware/qcom/sm8250/OnePlus/`** - documentul original omitea subdirectorul `OnePlus/`, iar fără el firmware loader-ul din kernel nu găsește fișierele.
+La nivelul spațiului utilizator, este obligatorie definirea profilelor ALSA UCM2 (Use Case Manager), care descriu căile corecte ale mixerului hardware. Fără aceste fișiere UCM2, serverul de sunet PipeWire nu poate deschide rutele către difuzoarele stereo sau interfața jack/USB-C, generând blocaje în fluxul audio al jocurilor rulate sub Proton.
+
+### **Firmware Proprietar Necesar**
+
+GPU-ul (`&gpu`) nu se inițializează fără shader-ul lui semnat, deci acesta e o precondiție dură pentru întregul stack grafic. Toate cele cinci blob-uri trebuie extrase dintr-o imagine OxygenOS și plasate în `/lib/firmware/qcom/sm8250/OnePlus/`:
+
+| Blob | Rol | Consecință dacă lipsește |
+| :---- | :---- | :---- |
+| `a650_zap.mbn` | Zap shader GPU (semnat) | **Fără GPU. Proiectul se oprește aici.** |
+| `adsp.mbn` | DSP audio | Fără sunet |
+| `cdsp.mbn` | DSP de calcul | Fără offload de calcul |
+| `venus.mbn` | Decodare video | Fără decodare video hardware |
+| `slpi.mbn` | DSP senzori | Fără senzori (oricum nefuncțional) |
+
+În plus, din `linux-firmware` (deschis, nu specific dispozitivului): `a650_sqe.fw`, `a650_gmu.bin`, firmware WiFi ath11k QCA6390 și firmware Bluetooth QCA. Toate acestea pot fi obținute fără a avea telefonul la îndemână - un dump al pachetului de update OxygenOS e suficient.
 
 ## **2\. Arhitectura Grafică & Drivere Vulkan (Adreno 650\)**
 
@@ -50,7 +82,7 @@ Pentru a susține translatarea dinamică a straturilor Direct3D către Vulkan ș
 * VK\_EXT\_custom\_border\_color: Necesară pentru emulatorul DXVK în vederea reproducerii fidele a modurilor de adresare a texturilor și a eșantionării specifice API-urilor D3D9 și D3D1117.  
 * VK\_EXT\_graphics\_pipeline\_library (GPL): Permite compilarea modulară și asincronă a stărilor de pipeline grafic (vertex input, pre-rasterization, fragment output), eliminând aproape în totalitate fenomenul de micro-întrerupere (*shader stutter*) specific jocurilor PC la prima încărcare a activelor11.  
 * VK\_EXT\_descriptor\_buffer și VK\_KHR\_dynamic\_rendering: Elimină structurile rigide de tip *descriptor sets* și *render passes*, aliniind stiva Vulkan direct la modelul de execuție D3D12 gestionat de VKD3D-Proton18.  
-* VK\_EXT\_image\_drm\_format\_modifier: Punctul structural central pentru integrarea cu Gamescope17. Această extensie permite crearea de imagini Vulkan asociate cu modificatori liniari sau compresați (UBWC \- Universal Bandwidth Compression), facilitând exportul direct de buffere DMABUF către planurile hardware ale afișajului prin modul *Direct Display Scanout*, fără copieri redundante în memoria de sistem17.
+* VK\_EXT\_image\_drm\_format\_modifier: Punctul structural central pentru integrarea cu un compositor Wayland care face scanout direct. Această extensie permite crearea de imagini Vulkan asociate cu modificatori liniari sau compresați (UBWC \- Universal Bandwidth Compression), facilitând exportul direct de buffere DMABUF către planurile hardware ale afișajului prin modul *Direct Display Scanout*, fără copieri redundante în memoria de sistem.
 
 ### **Microarhitectura TBDR: Tiled GMEM vs. Sysmem Rendering**
 
@@ -71,6 +103,12 @@ Pentru a preveni degradarea performanței cauzată de recompilările frecvente, 
 Asocierea acestor setări cu opțiunea dxvk.enableAsync \= true permite delegarea sarcinilor de compilare către nucleele de eficiență Cortex-A55, eliberând nucleele mari Cortex-A77 pentru logica jocului și emularea CPU2.
 
 ## **3\. Integrarea Proton 11 ARM64 & FEX-Emu**
+
+> **Confirmat:** Proton 11 ARM64 e real și livrat public. Proton 11.0-1 Beta 3 (mai 2026) vine cu
+> FEX-2604, iar FEX 2608 a apărut ca release lunar curent în august 2026. Tot efortul e împins
+> de **Steam Frame**, dispozitivul Valve cu Snapdragon 8 Gen 3 și SteamOS - un GPU din aceeași
+> familie Adreno a6xx, cu același driver Turnip ca pe Adreno 650. Valve publică și instrucțiuni
+> oficiale de build ARM64 pentru Proton.
 
 Tranziția de la platformele x86\_64 tradiționale la arhitectura ARM64 pentru jocuri Windows complexe este asigurată de **Proton 11 ARM64**, care integrează nativ recompilatorul binar usermode **FEX-Emu**9.
 
@@ -102,6 +140,19 @@ Pentru activarea stivei de compatibilitate în clientul oficial Steam ARM64, est
    * FEX\_CONFIG\_JSON=/etc/fex-emu/Config.json: Definește opțiunile de recompilare JIT, permițând dezactivarea emulării stricte a coprocesorului matematic x87 pe 80 de biți pentru a obține un spor de până la 15% în jocurile pe 32 de biți10.  
    * PRESSURE\_VESSEL\_SHARE\_HOME=1: Permite containerului Steam să acceseze driverele și socket-urile DRM/Wayland din sistemul de operare gazdă.
 
+> **Ce lipsește din pașii de mai sus:** clientul Steam ARM64 nu e produsul finit "client Steam Frame" -
+> e un build automat, nepromovat, pe care Valve nu îl anunță oficial. Conform investigației
+> detaliate a lui Drakulix pe postmarketOS, clientul e "total inconștient" că rulează pe ARM64 și
+> încearcă implicit să lanseze un runtime x86_64. SteamLinuxRuntime 4.0 și Proton pentru arm64
+> chiar există ca build-uri Valve, dar clientul nu le descarcă automat. Depozitul Proton arm64
+> **nu conține `toolmanifest.vdf`** - de aceea pasul 2 de mai sus e necesar, nu opțional. Ca să
+> funcționeze cu adevărat, mai trebuie: SteamRT4 arm64 folosit ca runtime propriu al clientului,
+> un `steam-runtime-launcher-service` pornit pe un nume de bus dedicat, și un shim `fexwrap` care
+> injectează FEX și driverele grafice în invocarea `bwrap` a pressure-vessel. Recomandat: build-ul
+> `steamdeck_stable`, nu `publicbeta` - primul păstrează comportamentul specific Deck. E fezabil,
+> dar e muncă manuală de asamblare, nu o instalare standard - cel mai probabil loc unde proiectul
+> se poate bloca.
+
 ## **4\. Managementul Termic, Energetic și Subsistemul de Input**
 
 Sarcina combinată de recompilare binară continuă (FEX-Emu), translatare Direct3D-Vulkan (DXVK) și randare grafică 3D generează o putere disipată susținută între 8 W și 11 W, o valoare ce depășește capacitatea de disipare pasivă a carcasei OnePlus 87.
@@ -113,7 +164,10 @@ SoC-ul Qualcomm Snapdragon 865 integrează o arhitectură tri-cluster pe 64 de b
 * **1x Kryo 585 Prime (Cortex-A77)** tactat până la 2.84 GHz cu 512 KB L2 cache1.  
 * **3x Kryo 585 Gold (Cortex-A77)** tactate până la 2.42 GHz cu câte 256 KB L2 cache1.  
 * **4x Kryo 585 Silver (Cortex-A55)** tactate până la 1.80 GHz cu câte 128 KB L2 cache1.  
-* **GPU Adreno 650** tactat nominal la 587 MHz (cu trepte dinamice de boost până la 670 MHz)4.
+* **GPU Adreno 650** tactat la maximum **587 MHz**. Documentul original dădea 670 MHz ca treaptă de boost -
+  acela e ceasul GPU-ului de pe Snapdragon **865+**, nu de pe 865-ul simplu din acest telefon. Diferența
+  contează: toate estimările de performanță din Secțiunea 5 care presupun 670 MHz sunt optimiste cu
+  aproximativ 12% față de ce poate acest chip.
 
 În regim pasiv, acumularea termică declanșează intervenția driverului de kernel qcom-spmi-temp-alarm la depășirea temperaturii de 70-75 °C pe senzorii joncțiunii de siliciu. Mecanismul de throttling reduce sever frecvența nucleului Prime sub 1.40 GHz, iar GPU-ul coboară la 305 MHz, prăbușind frecvența de cadre și generând blocaje masive.
 
@@ -125,71 +179,128 @@ Această extracție continuă de căldură modifică radical comportamentul guve
 
 * Nucleele Kryo 585 Prime (2.84 GHz) și Gold (2.42 GHz) își mențin frecvențele maxime fără întrerupere pe parcursul sesiunilor prelungite de joc1.  
 * Planificatorul de procese din kernel nu mai este forțat să migreze firele intensive de execuție ale FEX-Emu către nucleele lente Cortex-A55, păstrând latența de execuție la un nivel minim.  
-* GPU-ul Adreno 650 rămâne blocat în starea de consum maximă (587-670 MHz), eliminând variațiile bruște de frametime cauzate de limitarea termică a alimentării4.
+* GPU-ul Adreno 650 rămâne blocat la ceasul lui maxim real de 587 MHz, eliminând variațiile bruște de frametime cauzate de limitarea termică a alimentării.
 
-### **Arhitectura Subsistemului de Input în Gamescope**
+Important: coolerul Peltier trage cei 10-12 W direct de la încărcătorul de perete, nu din bateria
+telefonului - deci jumătatea de răcire a acestui argument rămâne validă indiferent de ce se
+întâmplă cu stiva de încărcare a telefonului. Jumătatea de alimentare e altă poveste, tratată
+separat mai jos.
 
-Gamescope funcționează ca un micro-compositor Wayland ultra-optimizat ce preia controlul direct asupra dispozitivului DRM Master (/dev/dri/card0) prin subsistemul KMS, eliminând complet necesitatea unui server de afișare X11 tradițional sau a unui mediu desktop complet8.  
-Interfațarea controllerului GameSir X3 Pro prin mufa Type-C se realizează direct la nivel de kernel prin driverul generic hid-generic sau hid-microslop, creând un nod de evenimente în /dev/input/eventX. Gamescope, utilizând biblioteca libinput, monitorizează și interceptează pachetele binare HID brute direct din subsistemul evdev8.  
-Evenimentele de axă și butoane sunt transpuse intern în apeluri standardizate specifice interfeței Linux Gamepad API / SDL2, fiind injectate transparent în procesul Proton prin nodul virtual /dev/uinput8. Această arhitectură fără intermediari asigură o latență de intrare extrem de redusă (< 2 ms) și garantează maparea instantanee a comenzilor în jocurile Windows cu suport nativ XInput.
+### **Alimentare în timpul sesiunii: cea mai mare necunoscută**
+
+Documentul original presupunea că telefonul se încarcă prin controller (*pass-through power*) cât
+timp Peltier-ul răcește, susținând sesiuni "nelimitate". Verificarea nu poate confirma asta:
+
+* Wiki-ul postmarketOS raportează încărcare la **5 W** prin `qcom,pm8150b-charger`, cu mențiunea
+  că încărcarea rapidă Warp are nevoie de `oplus,stm8s-fastcg`, **pentru care nu există driver**.
+* Device tree-ul verificat (Xo666) **nu declară niciun nod de charger**. Configurează doar
+  `pm8150b_typec` ca sink PD (5V/3A fix, plus 5-12V variabil) - ceea ce înseamnă că telefonul poate
+  *cere* curent, nu neapărat că îl și transformă în încărcare a bateriei.
+* La un consum de sistem de 8-11 W sub sarcină, contra unei intrări posibil limitate la 5 W, pe o
+  baterie de 16.37 Wh, calculul dă aproximativ **3 ore de joc cu baterie în scădere lentă**, nu
+  sesiuni nelimitate. Sesiunile scurte-medii sunt realiste; "bagă-l în priză și joacă la infinit" nu
+  e o certitudine pe acest kernel.
+
+Remediile propuse inițial trebuie tratate cu scepticism:
+
+* Fixarea profilului PD la 5V/3A prin patch DTS - DTS-ul deja declară exact acest profil; nu există
+  dovadă că asta ar fi problema.
+* Comanda `echo 0 > /sys/class/power_supply/battery/charging_enabled` - acesta e un nod **sysfs
+  downstream** (Android/CAF), care nu există în kernelul mainline. `power_supply` din mainline expune
+  în schimb `charge_control_limit` / `input_current_limit`. Comanda de mai sus va eșua aproape sigur.
+
+**De rezolvat cu telefonul fizic în mână.** Aceasta rămâne cea mai mare necunoscută pentru
+utilizarea ca handheld.
+
+### **Arhitectura Subsistemului de Input**
+
+Compositorul folosit pentru sesiunea de gaming (fie el un micro-compositor Wayland dedicat, fie
+un mediu minimal) preia controlul direct asupra dispozitivului DRM Master (/dev/dri/card0) prin
+subsistemul KMS, eliminând complet necesitatea unui server de afișare X11 tradițional sau a unui
+mediu desktop complet. Interfațarea controllerului GameSir X3 Pro prin mufa Type-C se realizează
+direct la nivel de kernel prin driverul generic hid-generic, creând un nod de evenimente în
+/dev/input/eventX. Prin biblioteca libinput, pachetele binare HID brute sunt monitorizate și
+interceptate direct din subsistemul evdev.
+Evenimentele de axă și butoane sunt transpuse intern în apeluri standardizate specifice interfeței
+Linux Gamepad API / SDL2, fiind injectate transparent în procesul Proton prin nodul virtual
+/dev/uinput. Această arhitectură fără intermediari asigură o latență de intrare extrem de redusă
+(< 2 ms) și garantează maparea instantanee a comenzilor în jocurile Windows cu suport nativ XInput.
 
 ## **5\. Ghid de Implementare, Benchmarks Așteptate & Managementul Riscurilor**
 
-Desfășurarea stivei de operare necesită pregătirea partițiilor fizice UFS, compilarea imaginilor personalizate și flash-uirea acestora prin intermediul instrumentelor de nivel scăzut14.
+Desfășurarea stivei de operare necesită pregătirea partițiilor fizice UFS, compilarea imaginilor personalizate și flash-uirea acestora prin intermediul instrumentelor de nivel scăzut. Nota importantă, detaliată în Secțiunea 1: nu există un pachet `device-oneplus-instantnoodle` oficial în pmaports, deci fluxul standard `pmbootstrap init` cu codename `instantnoodle` **nu funcționează ca atare**. Pașii de mai jos presupun construirea dintr-un fork comunitar (Xo666 sau ObiKeahloa), integrat manual în arborele pmaports local sau compilat independent.
 
-### **Fluxul Pas cu Pas de Instalare via pmbootstrap și fastboot**
+### **Fluxul Pas cu Pas de Instalare (dintr-un fork comunitar SM8250)**
 
-> 1. **Deblocarea Bootloader-ului:** Terminalul este comutat în modul Fastboot prin menținerea combinației de taste Volume Down \+ Power, urmată de comanda:fastboot flashing unlock  
-> 2. **Inițializarea Mediului de Construcție:** Pe o stație gazdă Linux, se inițializează mediul postmarketOS:pmbootstrap init Se configurează parametrii:  
-   * *Vendor:* oneplus  
-   * *Codename:* instantnoodle (sau instantnoodlep pentru varianta Pro)2  
-   * *Channel:* edge  
-   * *User Interface:* gamescope (sau none pentru configurare minimală)  
-> 3. **Compilarea Nucleului și Generarea Imaginilor:** Se compilează pachetele de kernel cu arborele DTS aferent SM8250 și se generează imaginile de disc12: pmbootstrap install \--split  
-> 4. **Scrierea Partițiilor:** Dispozitivul conectat în modul Fastboot este inscripționat secvențial14:  
->    Bash  
->    pmbootstrap flasher flash\_boot  
->    pmbootstrap flasher flash\_rootfs
+> 1. **Deblocarea Bootloader-ului:** Terminalul este comutat în modul Fastboot prin menținerea combinației de taste Volume Down \+ Power, urmată de comanda: `fastboot flashing unlock`
+> 2. **Pregătirea Kernelului:** Se clonează fork-ul verificat (`github.com/Xo666/mainline-instantnoodle`, branch `6.16.7`, sau `ObiKeahloa/linux`, branch `sm8250/v6.13-instantnoodle`) și se integrează `sm8250-oneplus-instantnoodle.dts` ca sursă de kernel pentru `pmbootstrap`, deoarece codename-ul `instantnoodle` nu există în pmaports upstream. `instantnoodlep` (8 Pro) și `kebab` (8T) sunt singurele codename-uri OnePlus SM8250 impachetate oficial.
+> 3. **Inițializarea Mediului de Construcție:** Pe o stație gazdă Linux, se rulează `pmbootstrap init`, punctând sursa de kernel către fork-ul de la pasul 2. **Interfața de utilizator "gamescope" nu există ca opțiune** - lista reală din pmbootstrap conține buffyboard, cage, console, cosmic, fbkeyboard, gnome, gnome-mobile, i3wm, kodi, lomiri, lxqt, mate, moonlight, niri, openbox, phosh, plasma-bigscreen/desktop/mobile, retroarch, shelli, sway, sxmo, weston, windowmaker, xfce4. Cea mai apropiată alegere gata făcută e `retroarch` sau `moonlight`; un compositor de gaming dedicat trebuie ambalat separat sau se alege `none` și se pornește manual după boot.
+> 4. **Compilarea Nucleului și Generarea Imaginilor:** `pmbootstrap install --split`
+> 5. **Scrierea Partițiilor:** Dispozitivul conectat în modul Fastboot este inscripționat secvențial:
+>    ```
+>    pmbootstrap flasher flash_boot
+>    pmbootstrap flasher flash_rootfs
+>    ```
+>    Dacă dispozitivul utilizează schema de partiționare dinamică Android (*Super Partition*), imaginea rootfs trebuie redirecționată către volumul fizic userdata sau mapată într-un sub-volum logic pentru a nu distruge structura LUN-urilor adiacente.
 
->    Dacă dispozitivul utilizează schema de partiționare dinamică Android (*Super Partition*), imaginea rootfs trebuie redirecționată către volumul fizic userdata sau mapată într-un sub-volum logic pentru a nu distruge structura LUN-urilor adiacente14.
+Pachetele `fex`, `proton`, `steam` și `box64` **nu există deloc în pmaports** - toată stiva de gaming din userspace e muncă neambalată, de făcut manual sau prin scripturi proprii.
 
 ### **Estimări de Performanță și Benchmarks Așteptate**
 
-Performanța atinsă combină eficiența recompilatorului JIT FEX-Emu, execuția nativă a straturilor Wine/DXVK și capacitățile de calcul ale GPU-ului Adreno 65010. Utilizarea motorului intern de upscaling AMD FidelityFX Super Resolution (FSR) din Gamescope permite reducerea rezoluției interne de randare la 720p cu scalare reconstructivă la 1080p, optimizând masiv rata de cadre.
+> **Tratați acest tabel ca plafon superior, nu ca măsurătoare.** Cifrele de mai jos sunt proiecții, nu
+> benchmark-uri reale rulate pe hardware, și presupun un GPU la 670 MHz - ceas pe care acest chip
+> (865 simplu, nu 865+) nu îl atinge; plafonul real e 587 MHz. Asta le face optimiste cu aproximativ
+> 12%, înainte de a lua în calcul overhead-ul de translatare FEX, care e necunoscuta mai mare dintre
+> cele două.
+
+Performanța atinsă combină eficiența recompilatorului JIT FEX-Emu, execuția nativă a straturilor Wine/DXVK și capacitățile de calcul ale GPU-ului Adreno 650. Utilizarea unui motor de upscaling gen AMD FidelityFX Super Resolution (FSR) în compositor permite reducerea rezoluției interne de randare la 720p cu scalare reconstructivă la 1080p, optimizând masiv rata de cadre.
 
 | Titlu Joc | API Grafic / Rută Translatare | Rezoluție Răndare / Scalare | Rata Medie de Cadre (FPS) | 1% Lows (FPS) | Consum Mediu Energetic |
 | :---- | :---- | :---- | :---- | :---- | :---- |
 | **Hades** | Direct3D 11 / DXVK | 1080p Nativ (Fără FSR) | 75-90 FPS | 60 FPS | ≈ 5.5 W |
-| **Fallout: New Vegas** | Direct3D 9 / DXVK 1.10.3 | 1080p Nativ / High | 50-60 FPS | 42 FPS | ≈ 6.8 W \[cite: 24, 33\] |
-| **The Elder Scrolls V: Skyrim SE** | Direct3D 11 / DXVK 2.x | 720p → 1080p (Gamescope FSR) | 40-52 FPS | 30 FPS | ≈ 8.5 W |
-| **Grand Theft Auto V** | Direct3D 11 / DXVK 2.x | 720p → 1080p (Gamescope FSR) | 32-45 FPS | 24 FPS | ≈ 9.2 W |
+| **Fallout: New Vegas** | Direct3D 9 / DXVK 1.10.3 | 1080p Nativ / High | 50-60 FPS | 42 FPS | ≈ 6.8 W |
+| **The Elder Scrolls V: Skyrim SE** | Direct3D 11 / DXVK 2.x | 720p → 1080p (FSR) | 40-52 FPS | 30 FPS | ≈ 8.5 W |
+| **Grand Theft Auto V** | Direct3D 11 / DXVK 2.x | 720p → 1080p (FSR) | 32-45 FPS | 24 FPS | ≈ 9.2 W |
 
-Jocurile pe 32 de biți Direct3D 9 (*Fallout: New Vegas*) și titlurile 2D/izometrice funcționează la rate de cadre ce saturează fluiditatea ecranului AMOLED de 90 Hz1. În titlurile 3D complexe din generația a opta (*GTA V*, *Skyrim SE*), translatarea asincronă GPL și scalarea reconstructivă FSR din Gamescope sunt absolut indispensabile pentru menținerea unei medii stabile de peste 30 FPS18.
+Jocurile pe 32 de biți Direct3D 9 (*Fallout: New Vegas*) și titlurile 2D/izometrice funcționează la rate de cadre ce saturează fluiditatea ecranului AMOLED de 90 Hz. În titlurile 3D complexe din generația a opta (*GTA V*, *Skyrim SE*), translatarea asincronă GPL și o scalare reconstructivă FSR sunt absolut indispensabile pentru menținerea unei medii stabile de peste 30 FPS.
 
 ### **Riscuri Tehnice Majore & Protocoale de Recuperare**
 
 | Risc Tehnic Identificat | Mecanism Cauzal | Impact Asupra Sistemului | Protocol Tehnic de Remediere / Mitigare |
 | :---- | :---- | :---- | :---- |
-| **Coruperea Tabelei GPT UFS** | Suprascrierea necorespunzătoare a volumelor dinamice super/userdata14. | Dispozitiv blocat complet (*Hard-Brick*); lipsă răspuns Fastboot. | Forțare în mod EDL (Qualcomm HS-USB QDLoader 9008\) și rescriere GPT via bkerler/edl sau OnePlus MSM Download Tool34. |
-| **Degradarea Termică a Bateriei** | Încărcare rapidă simultană cu disiparea termică maximă a SoC-ului. | Supraîncălzire chimică a celulei Li-Po; risc de umflare și degradare accelerată. | Activarea bypass-ului de încărcare (*pass-through power*) în kernel via nodurile sysfs ale driverului pm8150b-charger12. |
-| **Eșec Handshake USB-PD** | Instabilitate tranzientă la comutarea rolurilor sink/source sub sarcină14. | Întreruperea alimentării coolerului Peltier și revenirea la starea de throttling sever7. | Descărcarea capacităților electrice, fixarea profilului 5V/3A în DTS și reatașarea conectorului USB-C14. |
+| **Coruperea Tabelei GPT UFS** | Suprascrierea necorespunzătoare a volumelor dinamice super/userdata. | Dispozitiv blocat complet (*Hard-Brick*); lipsă răspuns Fastboot. | Forțare în mod EDL (Qualcomm HS-USB QDLoader 9008) și rescriere GPT via bkerler/edl sau OnePlus MSM Download Tool. |
+| **Alimentare insuficientă în sesiune** | Nu există niciun nod de charger în device tree-ul verificat; sink PD declarat nu garantează încărcare reală. | Bateria se descarcă sub sarcină (~3 ore estimate), nu se menține la infinit chiar cu Peltier alimentat din priză. | Nerezolvat pe kernelul actual - de investigat pe hardware (Secțiunea 4). Nu presupuneți un bypass de încărcare funcțional. |
+| **Eșec Handshake USB-PD** | Comportament netestat al mux-ului `fcs,fsa4480` la orientare inversă a conectorului. | Posibilă întrerupere a alimentării coolerului Peltier și revenire la throttling. | Marcat OPEN în log-ul de verificare; necesită testare directă pe dispozitiv. |
 
 #### **Protocolul de Recuperare EDL (Emergency Download Mode)**
 
-În eventualitatea unui hard-brick provocat de alterarea tabelelor GUID ale discurilor fizice UFS, SoC-ul SM8250 poate fi recuperat prin modul de descărcare de urgență34. Terminalul este deconectat, iar prin menținerea ambelor butoane de volum la introducerea cablului USB se inițializează interfața Qualcomm HS-USB QDLoader 900834.  
-De sub un sistem Linux, utilitarul open-source bkerler/edl permite comunicarea cu nucleul primar PBL (Primary Boot Loader), încărcarea binarului semnat Firehose (prog\_firehose\_ddr.elf) și reconstrucția completă a LUN-urilor UFS din imaginile de fabrică OxygenOS34.
+În eventualitatea unui hard-brick provocat de alterarea tabelelor GUID ale discurilor fizice UFS, SoC-ul SM8250 poate fi recuperat prin modul de descărcare de urgență. Terminalul este deconectat, iar prin menținerea ambelor butoane de volum la introducerea cablului USB se inițializează interfața Qualcomm HS-USB QDLoader 9008.
+De sub un sistem Linux, utilitarul open-source bkerler/edl permite comunicarea cu nucleul primar PBL (Primary Boot Loader), încărcarea binarului semnat Firehose (prog_firehose_ddr.elf) și reconstrucția completă a LUN-urilor UFS din imaginile de fabrică OxygenOS.
 
-#### **Protecția Acumulatorului prin Bypass Energetic**
+#### **Protecția Acumulatorului: de verificat, nu de presupus**
 
-Pentru a preveni uzura prematură a bateriei pe durata sesiunilor prelungite de gaming cu alimentare externă, kernelul mainline trebuie compilat cu suport extins de control în driverul pm8150b-charger12.  
-Prin intermediul scripturilor de inițializare Gamescope, sistemul decuplează încărcarea chimică a acumulatorului și direcționează întregul flux de curent exclusiv către alimentarea plăcii de bază prin comanda:echo 0 \> /sys/class/power\_supply/battery/charging\_enabled  
-Această configurare menține acumulatorul la o temperatură scăzută și permite funcționarea la performanțe maxime fără degradarea stării de sănătate a celulei Li-Po.
+Documentul original propunea un bypass de încărcare prin `echo 0 > /sys/class/power_supply/battery/charging_enabled`. Acesta e un nod **sysfs downstream** specific kernelelor Android/CAF - nu există în `power_supply` mainline, deci comanda va eșua pe acest kernel. Mainline expune în schimb `charge_control_limit` și `input_current_limit` sub `/sys/class/power_supply/`, dar chiar și acestea presupun un driver de charger funcțional - iar device tree-ul verificat nu declară niciunul (Secțiunea 4). Practic: nu există încă o rețetă confirmată de a proteja bateria în sesiuni lungi pe acest kernel; e primul lucru de testat cu telefonul fizic în mână, nu de presupus rezolvat.
 
 ## **6\. Concluzii**
 
-Implementarea unei platforme de gaming complet Mainline Linux pe smartphone-ul OnePlus 8 validează potențialul arhitecturii SM8250 de a evolua într-o veritabilă consolă portabilă1. Convergența dintre driverul grafic Mesa Turnip (cu suport complet Vulkan 1.3 și GPL), micro-compositorul Gamescope și stiva de execuție hibridă Proton 11 ARM64 susținută de recompilatorul JIT FEX-Emu rezolvă principalele bariere de compatibilitate și performanță8.  
-Stabilitatea pe termen lung a acestui ecosistem depinde în mod critic de doi factori fizici și de sistem: neutralizarea limitărilor termice prin răcirea activă termoelectrică Peltier (asigurată de perifericul GameSir X3 Pro) pentru a menține frecvențele maxime pe nucleele Kryo 585 Prime/Gold, și configurarea corectă a subsistemelor de kernel pentru comutarea USB-C și bypass-ul energetic al bateriei1.  
-Prin respectarea arhitecturii documentate, OnePlus 8 depășește stadiul de simplu experiment demonstrativ, oferind o experiență de joc fluidă și stabilă în titluri complexe de PC rulate direct pe hardware ARM641.
+Telefonul chiar boot-ează pe Linux mainline cu accelerare 3D funcțională - asta era singurul lucru
+care putea opri proiectul din start, și răspunsul e da. Dar "mainline" înseamnă aici fork-ul unui
+singur contributor, nu suport oficial în kernel.org sau în pmaports, iar fluxul de instalare din
+documentul original nu rulează ca atare pe acest device tree.
+
+Convergența dintre driverul grafic Mesa Turnip (cu suport complet Vulkan 1.3 și GPL) și stiva de
+execuție hibridă Proton 11 ARM64 susținută de recompilatorul JIT FEX-Emu rezolvă principalele
+bariere de compatibilitate - capitolul cel mai solid al documentului. Compositorul de gaming
+(fostul "Gamescope" din plan) și clientul Steam ARM64 rămân de asamblat manual, iar cea mai mare
+necunoscută rămâne alimentarea telefonului în sesiuni lungi: nu există dovadă de driver de
+încărcare funcțional pe kernelul verificat, deci "bagă-l în priză și joacă la infinit" nu e o
+certitudine - estimarea realistă e de ordinul a 3 ore de joc cu baterie în scădere lentă. Coolerul
+Peltier al GameSir X3 Pro rezolvă totuși jumătatea termică a problemei indiferent de rezultatul
+alimentării, pentru că se alimentează singur de la priză.
+Prin respectarea corecțiilor din acest document și verificarea celor două necunoscute rămase
+(alimentarea, Secțiunea 4, și clientul Steam ARM64, Secțiunea 3) pe hardware real, OnePlus 8 poate
+depăși stadiul de experiment demonstrativ și deveni o consolă portabilă funcțională pe Linux
+mainline.
 
 #### **Lucrări citate**
 

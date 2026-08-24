@@ -239,7 +239,18 @@ translation overhead, which is the larger unknown. Treat the table as an upper b
 
 ---
 
-## 7. Summary
+## 7. Rewrite status
+
+**Done (2026-08-24).** [`Gaming Mainline OnePlus 8.md`](../Gaming%20Mainline%20OnePlus%208.md)
+has been corrected in place against every WRONG/PARTIAL/OPEN item logged above: the
+device-enablement chapter now describes the Xo666/ObiKeahloa forks instead of a fictional
+`pmbootstrap init instantnoodle` flow, touchscreen/panel/audio/UFS claims match the DTS,
+GPU clock is corrected to 587 MHz, the charging section is rewritten around "no charger
+node exists" instead of a downstream sysfs bypass, `gamescope` is removed as an install
+option, the Steam ARM64 client section now covers the Drakulix fexwrap/SteamRT4 plumbing,
+and the benchmark table carries an explicit "projection, not measurement" caveat.
+
+## 8. Summary
 
 **Alive.** The device boots mainline with working 3D - that was the one thing that could
 have ended the project, and it's answered. Graphics and compatibility chapters are broadly
