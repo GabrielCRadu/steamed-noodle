@@ -40,6 +40,9 @@ claims turned out to only be partially correct.
 - `docs/verification-log.md` - the actual audit trail. Every claim in the main document,
   checked against pmaports, the kernel forks, and a real build, with sources. This is
   the file to read if you want to know what is actually confirmed versus assumed.
+- `docs/build-environment.md` - how to set up a machine to build this (WSL2/Ubuntu, the
+  toolchain, the recorded traps) and how to reproduce the verified package and image builds.
+  Also has the current work queue and the list of things that must not be done yet.
 - `reference/dts/` - the three known community device trees for this phone (from three
   different forks), pulled for direct comparison. They disagree with each other on
   several points, including which one has a working GPU versus a working battery
